@@ -1,0 +1,2987 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<!-- 放置勇者(ブラウザ版): このファイルだけで動きます。協力プレイはパーティのコードで参加します(WebRTC・公開PeerJSサーバー)。 -->
+<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>放置勇者</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DotGothic16&display=swap" rel="stylesheet">
+<style>
+/* Layout: one column, 560px max. Square pixel-style frames, kanji tiles as sprites, bottom tab bar. */
+:root{
+  --bg:#E8EDEF; --surface:#F7F9FA; --surface2:#DCE4E8; --ink:#13222B; --mute:#556873; --line:#C5D1D7;
+  --accent:#0B7A85; --accent-ink:#FFFFFF; --gold:#A86A0C; --hp:#2E8B57; --foe:#C0392B;
+  --atk:#C2410C; --dfn:#1F6FB2; --gro:#4C8A1F; --hyb:#7A4FB5; --on-b:#FFFFFF; --star:#B03A74;
+  /* only the pixel display face is downloaded; body text uses the device's own Japanese font,
+     which saves the many font files a Japanese web font in three weights would pull in */
+  --font-display:'DotGothic16','Hiragino Sans','Hiragino Kaku Gothic ProN','Yu Gothic UI','Yu Gothic','Meiryo','Noto Sans JP',sans-serif;
+  --font-body:'Hiragino Sans','Hiragino Kaku Gothic ProN','Yu Gothic UI','Yu Gothic','Meiryo','Noto Sans JP','Noto Sans CJK JP',system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0E1920; --surface:#15242D; --surface2:#1D313C; --ink:#E3ECEF; --mute:#8CA2AD; --line:#29404C;
+    --accent:#43C6D0; --accent-ink:#05191C; --gold:#E3AD45; --hp:#4CC98A; --foe:#EE6A5A;
+    --atk:#F0814E; --dfn:#5AA9EB; --gro:#8CCB5A; --hyb:#B28DEB; --on-b:#0E1920; --star:#F08CC0; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0E1920; --surface:#15242D; --surface2:#1D313C; --ink:#E3ECEF; --mute:#8CA2AD; --line:#29404C;
+  --accent:#43C6D0; --accent-ink:#05191C; --gold:#E3AD45; --hp:#4CC98A; --foe:#EE6A5A;
+  --atk:#F0814E; --dfn:#5AA9EB; --gro:#8CCB5A; --hyb:#B28DEB; --on-b:#0E1920; --star:#F08CC0; color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:15px;line-height:1.55;
+  padding-block:14px 84px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+  -webkit-tap-highlight-color:transparent;
+}
+button,textarea{font:inherit;color:inherit}
+b{font-weight:700}
+.app{max-width:560px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+.pane{display:flex;flex-direction:column;gap:16px;min-width:0}
+h1,h2,p,dl,dd,ul{margin:0}
+h1{font-family:var(--font-display);font-size:26px;letter-spacing:.12em;font-weight:400}
+.sub{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700}
+.lead,.hint{font-size:13px;color:var(--mute)}
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.wallet{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.chip{display:flex;align-items:baseline;gap:6px;border:2px solid var(--line);background:var(--surface);padding:3px 10px;font-size:12px;color:var(--mute);font-weight:700;white-space:nowrap}
+.chip b{font-family:var(--font-display);font-size:18px;color:var(--ink);font-weight:400;font-variant-numeric:tabular-nums}
+.chip.gold b{color:var(--gold)}
+.chip.sp.on{border-color:var(--accent)}
+.chip.sp.on b{color:var(--accent)}
+.card{border:2px solid var(--line);background:var(--surface);padding:14px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.report{border-color:var(--gold)}
+.report h2{font-family:var(--font-display);font-size:18px;font-weight:400;letter-spacing:.08em}
+.btn{border:2px solid var(--ink);background:var(--accent);color:var(--accent-ink);font-weight:700;padding:8px 14px;min-height:44px;cursor:pointer}
+.btn:disabled{opacity:.55;cursor:not-allowed;background:var(--surface2);color:var(--mute);border-color:var(--line)}
+.btn.ghost{background:transparent;color:var(--ink)}
+.btn.danger{background:transparent;color:var(--foe);border-color:var(--foe)}
+.btnrow{display:flex;gap:8px;flex-wrap:wrap}
+button:focus-visible,textarea:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+
+.stagebar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.zone{font-family:var(--font-display);font-size:20px;letter-spacing:.06em}
+.stg{font-size:13px;color:var(--mute)}
+.stg b{font-family:var(--font-display);font-weight:400;color:var(--ink);font-size:16px}
+.stg em{font-style:normal;margin-left:6px}
+.seg{display:flex;border:2px solid var(--ink)}
+.seg button{background:transparent;border:0;padding:8px 16px;min-height:40px;font-weight:700;cursor:pointer;color:var(--mute)}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.pips{display:flex;gap:6px;align-items:center}
+.pip{width:20px;height:8px;background:var(--surface2);border:1px solid var(--line)}
+.pip.on{background:var(--accent);border-color:var(--accent)}
+.pip.boss{width:30px;border-color:var(--foe)}
+.pip.boss.on{background:var(--foe)}
+.pips span{font-size:11px;color:var(--mute);margin-left:2px}
+
+.arena{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center;padding:16px 8px;border:2px solid var(--line);background:var(--surface);contain:layout}
+.unit{position:relative;display:flex;flex-direction:column;gap:6px;align-items:center;min-width:0}
+.vs{font-family:var(--font-display);font-size:20px;color:var(--mute)}
+.sprite{width:min(92px,100%);aspect-ratio:1;border:2px solid var(--accent);background:var(--surface2);display:grid;place-items:center;font-family:var(--font-display);font-size:46px;line-height:1;color:var(--accent)}
+.foe .sprite{border-color:var(--foe);color:var(--foe)}
+.foe .sprite.boss{box-shadow:0 0 0 3px var(--surface),0 0 0 5px var(--foe)}
+.unit.hit .sprite{transform:translateX(4px)}
+.uname{font-size:13px;font-weight:700;text-align:center;min-height:20px}
+.uname small{font-size:11px;color:var(--mute);font-weight:500}
+.bar{width:100%;height:12px;border:2px solid var(--ink);background:var(--surface2);overflow:hidden;contain:strict}
+.bar i{display:block;height:100%;width:100%;background:var(--hp);background-image:repeating-linear-gradient(90deg,transparent 0 5px,rgba(0,0,0,.14) 5px 6px)}
+.foe .bar i{background-color:var(--foe)}
+.bar.xpbar i{background-color:var(--accent);width:0}
+/* live bars move by a transform on their own layer: no re-layout or repaint, and no eased transition, so they step like the pixel art */
+.bar i.lv{width:100%;transform:translateX(-100%);will-change:transform}
+.num{font-size:11px;color:var(--mute);font-variant-numeric:tabular-nums}
+.fl-layer{position:absolute;inset:0;pointer-events:none;contain:layout style}
+.fl{position:absolute;top:14px;width:0;display:flex;justify-content:center;font-family:var(--font-display);font-size:17px;color:var(--ink);white-space:nowrap;animation:rise .9s ease-out forwards;text-shadow:0 0 3px var(--surface),0 0 3px var(--surface),0 0 6px var(--surface)}
+.fl.crit{color:var(--gold);font-size:21px}
+.fl.dmg{color:var(--foe)}
+@keyframes rise{from{transform:translateY(0);opacity:1}to{transform:translateY(-40px);opacity:0}}
+
+.xp{display:flex;flex-direction:column;gap:6px}
+.xp-top{display:flex;justify-content:space-between;font-size:13px;color:var(--mute);font-variant-numeric:tabular-nums}
+.xp-top b{font-family:var(--font-display);font-weight:400;color:var(--ink);font-size:20px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;background:var(--line);border:2px solid var(--line)}
+.stats>div{background:var(--surface);padding:8px 10px;min-width:0}
+.stats dt{font-size:11px;color:var(--mute)}
+.stats dd{font-family:var(--font-display);font-size:17px;font-variant-numeric:tabular-nums}
+.log{list-style:none;padding:0;display:flex;flex-direction:column;gap:2px;font-size:13px;color:var(--mute)}
+.log li:first-child{color:var(--ink)}
+
+.row{display:grid;grid-template-columns:1fr auto;gap:4px 12px;align-items:center;padding:14px 0;border-bottom:1px solid var(--line)}
+.row:first-child{padding-top:0}
+.row h2{font-size:16px}
+.row .d{font-size:13px;color:var(--mute);font-variant-numeric:tabular-nums}
+.row .btn{grid-row:1/3;grid-column:2;min-width:112px}
+.row .btn small{display:block;font-size:11px;font-weight:500}
+
+.sp-head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.sp-big{font-family:var(--font-display);font-size:34px;line-height:1;color:var(--accent)}
+.cols{display:grid;grid-template-columns:repeat(5,1fr);text-align:center;font-size:12px;font-weight:700;letter-spacing:.12em;color:var(--mute)}
+.tree{position:relative;width:100%;aspect-ratio:500/936;border:2px solid var(--line);background:var(--surface)}
+.tree svg{position:absolute;inset:0;width:100%;height:100%}
+.ln{stroke:var(--line);stroke-width:3}
+.ln.on.atk{stroke:var(--atk)}.ln.on.dfn{stroke:var(--dfn)}.ln.on.gro{stroke:var(--gro)}.ln.on.hyb{stroke:var(--hyb)}.ln.on.cap{stroke:var(--gold)}.node{position:absolute;transform:translate(-50%,-50%);width:min(60px,13.6%);aspect-ratio:1;border:2px solid var(--b);background:var(--surface);color:var(--ink);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0;cursor:pointer}
+.node.atk{--b:var(--atk)}.node.dfn{--b:var(--dfn)}.node.gro{--b:var(--gro)}.node.hyb{--b:var(--hyb)}.node.cap{--b:var(--gold)}
+.node .g{font-family:var(--font-display);font-size:clamp(17px,5vw,24px);line-height:1}
+.node .l{font-size:10px;line-height:1.2;color:var(--mute);font-variant-numeric:tabular-nums}
+.node.locked{opacity:.4;border-style:dashed}
+.node.got{background:var(--b);color:var(--on-b)}
+.node.got .l{color:inherit}
+.node.max{box-shadow:0 0 0 2px var(--surface),0 0 0 4px var(--gold)}
+.node.sel{outline:3px solid var(--ink);outline-offset:3px}
+.detail{position:sticky;bottom:calc(66px + env(safe-area-inset-bottom,0px));z-index:3;border-color:var(--ink)}
+.detail .dh{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.detail .dh b{font-family:var(--font-display);font-weight:400;font-size:20px}
+.detail .dh span{font-size:13px;color:var(--mute)}
+.eff{list-style:none;padding:0;display:flex;flex-direction:column;gap:2px;font-size:14px}
+.eff li{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.eff em{font-style:normal;color:var(--accent);font-weight:700;margin-left:6px}
+.dfoot{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.why{font-size:13px;color:var(--mute);min-width:0;flex:1 1 140px}
+
+.rec{display:flex;flex-direction:column;border:2px solid var(--line);background:var(--surface)}
+.rec>div{display:flex;justify-content:space-between;gap:12px;padding:10px 14px;border-bottom:1px solid var(--line);font-size:14px}
+.rec>div:last-child{border-bottom:0}
+.rec dt{color:var(--mute)}
+.rec dd{font-family:var(--font-display);font-variant-numeric:tabular-nums;text-align:right}
+textarea{width:100%;background:var(--surface2);border:2px solid var(--line);padding:8px;font-size:12px;resize:vertical}
+
+.tabs{position:fixed;left:0;right:0;bottom:0;z-index:5;background:var(--surface);border-top:2px solid var(--line);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-bottom:env(safe-area-inset-bottom,0px)}
+.tabs>div{max-width:560px;margin:0 auto;display:flex}
+.tab{flex:1;min-width:0;height:58px;padding:0;background:none;border:0;cursor:pointer;color:var(--mute);font-weight:700;font-size:11px;position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;white-space:nowrap}
+.tab .ti{font-family:var(--font-display);font-size:19px;line-height:1;font-weight:400}
+.tab[aria-selected="true"]{color:var(--ink);box-shadow:inset 0 3px 0 var(--accent)}
+.tab[aria-selected="true"] .ti{color:var(--accent)}
+.tab i{position:absolute;top:8px;left:calc(50% + 11px);width:8px;height:8px;background:var(--gold)}
+
+.chip.soul b{color:var(--hyb)}
+.stagebar .btn{min-height:40px;padding:6px 14px}
+.dunbar{font-size:13px;color:var(--mute);font-variant-numeric:tabular-nums}
+.dunbar b{font-family:var(--font-display);font-weight:400;color:var(--ink);font-size:15px}
+.keys{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.keypips{display:flex;gap:6px;margin-top:6px}
+.keypips b{display:block;width:14px;height:22px;border:2px solid var(--gold)}
+.keypips b.on{background:var(--gold)}
+.dlist{display:flex;flex-direction:column;gap:10px}
+.dun{display:grid;grid-template-columns:56px 1fr;gap:2px 12px;border:2px solid var(--line);background:var(--surface);padding:12px}
+.dun>*{min-width:0}
+.dun.gold{--b:var(--gold)}.dun.xp{--b:var(--gro)}.dun.sp{--b:var(--dfn)}.dun.soul{--b:var(--hyb)}
+.dun .tile{grid-row:1/4;width:56px;height:56px;border:2px solid var(--b);color:var(--b);background:var(--surface2);display:grid;place-items:center;font-family:var(--font-display);font-size:30px;line-height:1}
+.dun h2{font-size:16px}
+.dun .r{font-size:14px;font-weight:700;color:var(--b)}
+.dun .t{font-size:12px;color:var(--mute)}
+.dun .foot{grid-column:1/-1;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:8px}
+.dun .foot .btn{min-width:96px}
+.dun .dbtns{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
+.qk{gap:8px}
+.qk .seg button{padding:6px 12px;min-height:36px;font-size:13px}
+.dun.locked{border-style:dashed}
+.dun.locked .tile,.dun.locked h2,.dun.locked .r{opacity:.5}
+.dun.here{border-color:var(--b)}
+.soulhead{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.soul-big{font-family:var(--font-display);font-size:34px;line-height:1;color:var(--hyb)}
+.reb{border-color:var(--hyb)}
+.gain{font-family:var(--font-display);font-size:26px;line-height:1.2;color:var(--hyb)}
+.recbtn{cursor:pointer;color:var(--ink);font-weight:700;font-size:12px;min-height:32px}
+.seg.wide{display:flex;width:100%}
+.seg.wide button{flex:1}
+.btn.sm{min-height:36px;padding:4px 10px;font-size:13px}
+.tile{width:48px;height:48px;flex:none;border:2px solid var(--b,var(--accent));color:var(--b,var(--accent));background:var(--surface2);display:grid;place-items:center;font-family:var(--font-display);font-size:26px;line-height:1}
+.clsgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.clscard{border:2px solid var(--line);background:var(--surface);padding:12px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.clscard.on{border-color:var(--accent)}
+.clscard .ch{display:flex;gap:10px;align-items:center}
+.clscard h2{font-size:16px}
+.clscard .mult,.istat{font-size:12px;color:var(--mute);font-variant-numeric:tabular-nums}
+.clscard .co{font-size:12px}
+.clscard .btn{margin-top:auto}
+.eqslots{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.eqslot{border:2px solid var(--line);background:var(--surface);padding:10px;display:flex;flex-direction:column;gap:4px;min-width:0}
+.eqslot .sn{font-size:11px;color:var(--mute);letter-spacing:.1em;font-weight:700}
+.eqslot .btn{margin-top:auto;align-self:flex-start}
+.iname{font-weight:700}
+.r0{color:var(--mute)}.r1{color:var(--dfn)}.r2{color:var(--hyb)}.r3{color:var(--gold)}
+.ore{font-family:var(--font-display);font-size:22px}
+.invrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}
+.invrow .btns{display:flex;gap:6px}
+.up{color:var(--gro);font-weight:700}.down{color:var(--foe);font-weight:700}
+.field{display:flex;flex-direction:column;gap:6px}
+.field input{font:inherit;color:var(--ink);background:var(--surface);border:2px solid var(--line);padding:8px 10px;min-height:44px;min-width:0}
+.field input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.inrow{display:flex;gap:8px;align-items:stretch}
+.inrow input{flex:1}
+.code{font-family:var(--font-display);font-size:26px;letter-spacing:.2em}
+.ptm{display:grid;grid-template-columns:40px minmax(0,1fr) auto;gap:2px 10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
+.ptm .tile{width:40px;height:40px;font-size:22px}
+.ptm .st{font-size:12px;font-weight:700}
+.ptm .st.ok{color:var(--gro)}
+.ptlist{display:flex;flex-direction:column}
+.clist{display:flex;flex-direction:column;gap:8px}
+.crow{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:2px 10px;align-items:center;border:2px solid var(--line);background:var(--surface);padding:10px}
+.crow .tile{width:44px;height:44px;font-size:24px;grid-row:1/3;--b:var(--foe)}
+.crow h3{margin:0;font-size:15px;grid-column:2}
+.crow .meta{font-size:12px;color:var(--mute);display:flex;gap:6px;flex-wrap:wrap;align-items:center;grid-column:2}
+.crow .act{grid-row:1/3;grid-column:3;align-self:center}
+.crow.sel{border-color:var(--accent)}
+.crow.locked{border-style:dashed}
+.crow.locked .tile,.crow.locked h3{opacity:.5}
+.tag{font-size:11px;padding:0 6px;border:1px solid var(--line);color:var(--ink)}
+.cf{border-color:var(--accent)}
+.cf-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.cf-head b{font-family:var(--font-display);font-weight:400;font-size:19px}
+.cfrow{display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:6px}
+.cfu{border:2px solid var(--line);background:var(--surface);padding:6px 4px;display:flex;flex-direction:column;align-items:center;gap:3px;min-width:0}
+.cfu .g{font-family:var(--font-display);font-size:24px;line-height:1;color:var(--accent)}
+.cfu.foe .g{color:var(--foe)}
+.cfu.boss{border-color:var(--foe)}
+.cfu.me{border-color:var(--accent)}
+.cfu.dead{opacity:.35}
+.cfu .nm{font-size:11px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cfu .bar{height:8px;border-width:1px}
+.vs2{font-size:11px;color:var(--mute);text-align:center;letter-spacing:.2em}
+.elc{display:inline-block;font-size:11px;font-weight:700;padding:0 5px;border:1px solid currentColor;line-height:1.5;vertical-align:middle}
+.el-fire{color:var(--foe)}.el-water{color:var(--dfn)}.el-grass{color:var(--gro)}
+.seg.places button{padding:8px 4px;font-size:13px;min-width:0}
+.seg.places button:disabled{opacity:.45;cursor:not-allowed}
+.stagenav{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.stagenav .info{font-size:12px;color:var(--mute);margin-right:auto;font-variant-numeric:tabular-nums}
+.stagenav .btn{min-height:36px;padding:4px 10px;font-size:13px}
+.elinfo{font-size:13px;color:var(--mute)}
+.field select{font:inherit;color:var(--ink);background:var(--surface);border:2px solid var(--line);padding:8px 10px;min-height:44px;max-width:100%}
+.chk{display:flex;gap:8px;align-items:center;font-size:13px;cursor:pointer}
+.chk input{width:18px;height:18px;accent-color:var(--accent)}
+.boxh{font-size:13px;font-weight:700;letter-spacing:.06em}
+.rec.txt{border:0;background:transparent}
+.rec.txt>div{padding:7px 0;align-items:baseline}
+.rec.txt dt{flex:none;white-space:nowrap}
+.rec.txt dd{font-family:var(--font-body);font-size:13px;min-width:0}
+.mseg button{padding:6px 2px;font-size:12px;min-width:0}
+.mlv{font-family:var(--font-display);font-size:24px;line-height:1.2}
+.mtree{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px 10px}
+.mnode{position:relative;--b:var(--accent);border:2px solid var(--b);background:var(--surface);color:var(--ink);padding:8px 4px;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;min-width:0;font:inherit}
+.mnode .g{font-family:var(--font-display);font-size:22px;line-height:1}
+.mnode .nm{font-size:12px;font-weight:700;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mnode .l{font-size:11px;color:var(--mute);font-variant-numeric:tabular-nums}
+.mnode.got{background:var(--b);color:var(--on-b)}
+.mnode.got .l{color:inherit}
+.mnode.max{box-shadow:0 0 0 2px var(--surface),0 0 0 4px var(--gold)}
+.mnode.locked{opacity:.45;border-style:dashed}
+.mnode.sel{outline:3px solid var(--ink);outline-offset:3px}
+.mnode.cap{grid-column:2;--b:var(--gold)}
+.mnode.up::before{content:"";position:absolute;left:50%;top:-16px;width:2px;height:14px;background:var(--line)}
+.detail.mdetail{position:static;border-color:var(--line)}
+/* companions: element tints a tile's frame and glyph through --b */
+.pe-fire{--b:var(--foe)}.pe-water{--b:var(--dfn)}.pe-grass{--b:var(--gro)}
+.seg button{position:relative}
+.seg button i{position:absolute;top:5px;right:6px;width:7px;height:7px;background:var(--gold)}
+.pets{display:flex;gap:4px;justify-content:center;flex-wrap:wrap;min-height:28px}
+.pt{width:28px;height:28px;border:2px solid var(--b,var(--accent));color:var(--b,var(--accent));background:var(--surface2);display:grid;place-items:center;font-family:var(--font-display);font-size:16px;line-height:1}
+.pt.hit{transform:translateY(-4px)}
+.fl.pet{font-size:14px;color:var(--hyb);top:40px}
+.pslots{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.pslot{border:2px solid var(--line);padding:8px;display:grid;grid-template-columns:40px minmax(0,1fr);gap:2px 8px;align-items:center;min-width:0;min-height:64px}
+.pslot .tile{width:40px;height:40px;font-size:22px;grid-row:1/3}
+.pslot b{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pslot .btn{grid-column:1/-1;justify-self:start;margin-top:4px}
+.pslot.empty{border-style:dashed;color:var(--mute);font-size:12px;display:flex;align-items:center;justify-content:center;text-align:center}
+.petrow{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:2px 10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}
+.petrow .tile{width:44px;height:44px;font-size:24px;grid-row:1/4}
+.petrow .pn{font-weight:700;display:flex;gap:6px;align-items:baseline;flex-wrap:wrap}
+.petrow .act{grid-row:1/4;grid-column:3}
+.petrow .bar{height:6px;border-width:1px}
+.rk{color:var(--gold);font-size:12px;font-weight:700}
+.dexsec{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
+.dexsec h3{margin:0;font-size:12px;color:var(--mute);letter-spacing:.06em}
+.dexg{display:grid;grid-template-columns:repeat(auto-fill,minmax(40px,1fr));gap:6px}
+.dx{aspect-ratio:1;max-width:100%;border:2px solid var(--b,var(--accent));background:var(--surface);color:var(--b,var(--accent));font-family:var(--font-display);font-size:20px;line-height:1;display:grid;place-items:center;cursor:pointer;padding:0}
+.dx.no{border-style:dashed;--b:var(--line);color:var(--mute)}
+.dx.sel{outline:3px solid var(--ink);outline-offset:2px}
+/* blacksmith */
+.plus{font-family:var(--font-display);font-weight:400;color:var(--accent)}
+.eqslot .btnrow{margin-top:auto;gap:6px}
+.smith{border-color:var(--accent)}
+.smith .dh{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.smrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 12px;align-items:center;padding-top:10px;border-top:1px solid var(--line)}
+.smrow b{font-size:14px}
+.elseg button{padding:6px 12px;min-height:36px;font-size:13px}
+.elseg button:disabled{opacity:.45;cursor:not-allowed}
+.invrow .btns{flex-wrap:wrap;justify-content:flex-end}
+/* achievements and titles */
+.recbtn{position:relative}
+.recbtn i{position:absolute;top:-5px;right:-5px;width:9px;height:9px;background:var(--gold)}
+.httl{font-size:11px;font-weight:700;color:var(--gold);text-align:center;margin-top:-4px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ach-big{font-family:var(--font-display);font-size:30px;line-height:1.1;color:var(--gold);font-variant-numeric:tabular-nums}
+.achsum{border-color:var(--gold)}
+.achrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}
+.achrow h3{margin:0;font-size:14px}
+.achrow .v{font-size:12px;color:var(--mute);font-variant-numeric:tabular-nums;text-align:right}
+.achrow .bar{grid-column:1/-1;height:6px;border-width:1px}
+.achrow .bar i{background-color:var(--gold)}
+.achrow.done .bar{opacity:.5}
+.apips{display:flex;gap:3px;flex-wrap:wrap;margin-top:4px}
+.apips b{width:10px;height:10px;border:1px solid var(--gold)}
+.apips b.on{background:var(--gold)}
+.ttlrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;border:2px solid var(--line);background:var(--surface);padding:10px 12px}
+.ttlrow+.ttlrow{margin-top:8px}
+.ttlrow h3{margin:0;font-size:15px}
+.ttlrow.on{border-color:var(--gold)}
+.ttlrow.on h3{color:var(--gold)}
+.ttlrow.locked{border-style:dashed}
+.ttlrow.locked h3{color:var(--mute)}
+.ttlrow .act{grid-row:1/3;grid-column:2}
+.ptm .tt{font-size:11px;color:var(--gold);font-weight:700}
+/* skill auto-learning */
+.skauto{gap:8px}
+.skauto .seg button{padding:6px 14px;min-height:36px;font-size:13px}
+.node .tg{position:absolute;top:-8px;right:-8px;min-width:18px;height:18px;padding:0 4px;border:1px solid var(--ink);background:var(--surface);color:var(--ink);font-family:var(--font-body);font-size:10px;font-weight:700;line-height:16px;text-align:center}
+.tgrow{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;font-size:14px;border-top:1px solid var(--line);padding-top:8px}
+.stepper{display:flex;align-items:center;gap:8px}
+.stepper b{font-family:var(--font-display);font-weight:400;font-size:16px;min-width:76px;text-align:center}
+.stepper .btn{min-width:40px}
+/* awakening */
+.chip.star b{color:var(--star)}
+.star-big{font-family:var(--font-display);font-size:34px;line-height:1;color:var(--star)}
+.awk{border-color:var(--star)}
+.awk .gain{color:var(--star)}
+.trtools{display:flex;gap:12px;align-items:center;flex-wrap:wrap;justify-content:space-between}
+.trtools .seg button{padding:6px 14px;min-height:36px;font-size:13px}
+@media (max-width:440px){.clsgrid{grid-template-columns:1fr}.eqslots{grid-template-columns:1fr}.invrow{grid-template-columns:minmax(0,1fr)}.invrow .btns{justify-content:flex-start}.smrow{grid-template-columns:minmax(0,1fr)}.smrow>.btn,.smrow>.seg{justify-self:start}}
+@media (prefers-reduced-motion: reduce){
+  .fl{animation:none}
+  .unit.hit .sprite{transform:none}
+  .pt.hit{transform:none}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <h1>放置勇者</h1>
+    <div class="wallet">
+      <div class="chip gold"><span>金</span><b id="gold">0</b></div>
+      <div class="chip sp" id="spChip"><span>SP</span><b id="spTop">0</b></div>
+      <div class="chip soul" id="soulChip" hidden><span>魂</span><b id="soulTop">0</b></div>
+      <div class="chip star" id="starChip" hidden><span>星</span><b id="starTop">0</b></div>
+      <button type="button" class="chip recbtn" id="recBtn">記録<i id="bdRec" hidden></i></button>
+    </div>
+  </header>
+
+  <section id="report" class="card report" hidden>
+    <h2>おかえりなさい</h2>
+    <p id="repTxt"></p>
+    <div class="btnrow"><button type="button" class="btn" id="repClose">受け取る</button></div>
+  </section>
+
+  <section id="dunRes" class="card report" hidden>
+    <h2 id="drTitle">帰還</h2>
+    <p id="drTxt"></p>
+    <div class="btnrow"><button type="button" class="btn" id="drClose">閉じる</button><button type="button" class="btn ghost" id="drAgain">もう一度挑戦</button></div>
+  </section>
+
+  <main>
+    <section id="tab-battle" class="pane">
+      <button type="button" class="btn ghost" id="coopBanner" hidden>協力バトル中です。協力タブで見る</button>
+      <div class="seg wide places" role="group" aria-label="戦う場所" id="placeSeg"></div>
+      <div class="stagebar">
+        <div>
+          <div class="zone" id="zoneName">はじまりの草原</div>
+          <div class="stg"><span id="stgLbl">ステージ</span> <b id="stageNo">1-1</b><em id="modeNote"></em></div>
+        </div>
+        <button type="button" class="btn ghost" id="retreat" hidden>撤退する</button>
+        <div class="seg" role="group" aria-label="進行モード" id="modeSeg">
+          <button type="button" id="modeAdv" aria-pressed="true">進行</button>
+          <button type="button" id="modeFarm" aria-pressed="false">周回</button>
+        </div>
+      </div>
+      <div class="pips" id="pips" aria-label="ボスまでの進み具合"></div>
+      <p class="dunbar" id="dunBar" hidden></p>
+      <div class="stagenav" id="stageNav">
+        <span class="info" id="navInfo"></span>
+        <button type="button" class="btn ghost" data-nav="-10">−10</button>
+        <button type="button" class="btn ghost" data-nav="-1">◀ 前</button>
+        <button type="button" class="btn ghost" data-nav="1">次 ▶</button>
+        <button type="button" class="btn ghost" data-nav="max">最前線</button>
+      </div>
+
+      <div class="arena">
+        <div class="unit" id="heroUnit">
+          <div class="fl-layer"></div>
+          <div class="sprite"><span id="heroG">勇</span></div>
+          <div class="uname"><span id="heroN">勇者</span> <small>Lv <b id="lvU">1</b></small></div>
+          <div class="httl" id="heroT" hidden></div>
+          <div class="bar"><i id="hpFill" class="lv"></i></div>
+          <div class="num" id="hpTxt"></div>
+          <div class="pets" id="petRow" aria-label="連れている仲間"></div>
+        </div>
+        <div class="vs" aria-hidden="true">対</div>
+        <div class="unit foe" id="foeUnit">
+          <div class="fl-layer"></div>
+          <div class="sprite" id="foeSprite"><span id="foeGlyph">液</span></div>
+          <div class="uname" id="foeName">　</div>
+          <div class="bar"><i id="foeFill" class="lv"></i></div>
+          <div class="num" id="foeTxt"></div>
+        </div>
+      </div>
+
+      <p class="elinfo" id="elInfo"></p>
+
+      <div class="xp">
+        <div class="xp-top"><span>Lv <b id="lv">1</b></span><span id="xpTxt"></span></div>
+        <div class="bar xpbar"><i id="xpFill" class="lv"></i></div>
+      </div>
+
+      <dl class="stats">
+        <div><dt>攻撃力</dt><dd id="sAtk">0</dd></div>
+        <div><dt>防御力</dt><dd id="sDef">0</dd></div>
+        <div><dt>秒間ダメージ</dt><dd id="sDps">0</dd></div>
+        <div><dt>攻撃間隔</dt><dd id="sInt">0</dd></div>
+        <div><dt>会心率</dt><dd id="sCrit">0</dd></div>
+        <div><dt>会心ダメージ</dt><dd id="sCritD">0</dd></div>
+        <div><dt>自然回復</dt><dd id="sReg">0</dd></div>
+        <div><dt>回避率</dt><dd id="sDodge">0</dd></div>
+        <div><dt>ゲーム速度</dt><dd id="sSpd">×1</dd></div>
+      </dl>
+      <div class="btnrow">
+        <button type="button" class="btn ghost sm" id="dropBtn" aria-expanded="false" aria-controls="dropBox">ドロップを見る</button>
+        <button type="button" class="btn ghost sm" id="statBtn" aria-expanded="false" aria-controls="fullStats">総合ステータスを見る</button>
+      </div>
+      <div class="card" id="dropBox" hidden></div>
+      <div class="card" id="fullStats" hidden></div>
+
+      <h2 class="sub">戦いの記録</h2>
+      <ul class="log" id="log"></ul>
+    </section>
+
+    <section id="tab-train" class="pane" hidden>
+      <div class="seg wide" role="group" aria-label="育成の種類" id="subSeg">
+        <button type="button" data-sub="train" aria-pressed="true">鍛錬</button>
+        <button type="button" data-sub="equip" aria-pressed="false">装備</button>
+        <button type="button" data-sub="class" aria-pressed="false">職業</button>
+        <button type="button" data-sub="mast" aria-pressed="false">熟練</button>
+        <button type="button" data-sub="pet" aria-pressed="false">仲間<i id="bdPet" hidden></i></button>
+      </div>
+      <div class="pane" id="sub-train">
+        <p class="lead">ゴールドで体を鍛えます。攻撃力・体力・防御力・ゴールド・経験値は上限なし、回復・速さ・会心・回避は上限まで強化できます。</p>
+        <div class="trtools">
+          <div class="seg" role="group" aria-label="1回に鍛える数" id="buySeg"><button type="button" data-buy="1">1回</button><button type="button" data-buy="10">10回</button><button type="button" data-buy="0">最大</button></div>
+          <label class="chk" id="autoTrBox" hidden><input type="checkbox" id="optAutoTr"> 自動で鍛錬する(安いものから)</label>
+        </div>
+        <div id="trainList"></div>
+      </div>
+      <div class="pane" id="sub-equip" hidden>
+        <div class="eqslots" id="eqSlots"></div>
+        <div class="card smith" id="smith" hidden></div>
+        <div class="card">
+          <div class="sp-head"><div><div class="sub">鍛冶屋</div><div class="ore"><b id="oreN">0</b> 鉱石</div></div><p class="hint" id="craftCost"></p></div>
+          <div class="field"><label class="sub" for="craftLv">作る装備のレベル</label><select id="craftLv"></select></div>
+          <div class="btnrow" id="craftBtns"><button type="button" class="btn" data-craft="w">武器を作る</button><button type="button" class="btn" data-craft="a">防具を作る</button><button type="button" class="btn" data-craft="r">装飾品を作る</button></div>
+          <p class="hint" id="craftMsg" role="status"></p>
+          <p class="hint">装備のレベルは、通算の最高ステージ10ごとに1つずつ作れるようになります。必要な金と鉱石はレベルごとに決まっています。鉱石はステージのボス、ダンジョンの番人、協力ステージで手に入ります。装備はステージでもたまに落ち、属性ダンジョンではその属性の装備が落ちます。装備と鉱石は転生しても残ります。</p>
+          <p class="hint">「鍛える」では、鉱石と金で装備を+15まで強化できます(1つごとにメインの能力 +10%、+6からは失敗することがあります)。サブ能力の付け直しと、武器・防具の属性の付け替えもできます。強化した装備を分解すると、使った鉱石の半分が戻ります。</p>
+          <label class="chk"><input type="checkbox" id="autoDis"> 拾ったコモン装備は自動で分解する</label>
+        </div>
+        <div class="sp-head"><h2 class="sub">持ち物 <span id="invN"></span></h2><button type="button" class="btn ghost sm" id="dismAll">コモンとレアを分解</button></div>
+        <div id="invList"></div>
+      </div>
+      <div class="pane" id="sub-class" hidden>
+        <p class="lead">職業はいつでも無料で変えられます。協力プレイでは職業ごとの役割で仲間を助けます。</p>
+        <div class="clsgrid" id="clsList"></div>
+      </div>
+      <div class="pane" id="sub-mast" hidden>
+        <p class="lead">熟練度は、その職業で敵を倒すと上がります。ボスと番人は10、放置中も上がり、協力ステージのクリアでは大きく上がります。熟練度が上がるともらえる熟練ポイントで、その職業だけのツリーを強化できます。効果はその職業のときだけ働き、熟練度とツリーは転生しても残ります。</p>
+        <div class="seg wide mseg" role="group" aria-label="熟練度を見る職業" id="mastSeg"></div>
+        <div class="card">
+          <div class="sp-head"><div><div class="sub" id="mastName"></div><div class="mlv" id="mastLv"></div></div><p class="hint" id="mastPts"></p></div>
+          <div class="bar xpbar"><i id="mastFill" class="lv"></i></div>
+          <p class="hint" id="mastNote"></p>
+        </div>
+        <div class="mtree" id="mastTree"></div>
+        <div class="card detail mdetail" id="mastDetail"></div>
+        <div class="btnrow"><button type="button" class="btn ghost" id="mastReset">この職業のツリーを振り直す</button></div>
+      </div>
+      <div class="pane" id="sub-pet" hidden>
+        <p class="lead">倒した敵が、ときどき仲間になります。連れていった仲間は勇者の横で戦い、加護の力も分けてくれます。同じ種類がまた仲間になると絆が深まって強くなり、連れている間は戦うたびにレベルが上がります。仲間は転生しても残ります。</p>
+        <div class="card">
+          <div class="sp-head"><h2 class="sub">連れていく仲間</h2><p class="hint" id="ptyNote"></p></div>
+          <div class="pslots" id="ptySlots"></div>
+        </div>
+        <h2 class="sub">仲間 <span id="petN"></span></h2>
+        <div id="petList"></div>
+        <div class="sp-head"><h2 class="sub">図鑑 <span id="dexN"></span></h2><p class="hint" id="dexNote"></p></div>
+        <div id="dexGrid"></div>
+        <div class="card detail" id="dexDetail" hidden></div>
+      </div>
+    </section>
+
+    <section id="tab-skill" class="pane" hidden>
+      <div class="sp-head">
+        <div><div class="sub">スキルポイント</div><div class="sp-big" id="spBig">0</div></div>
+        <p class="hint">レベルアップで1pt、5の倍数のレベルは2pt。賢者の書庫の番人からも手に入ります。下の段ほど必要なSPが多く、最下段の「勇者の証」は上限なく強化できます。</p>
+      </div>
+      <div class="card skauto">
+        <div class="sp-head"><h2 class="sub">自動習得</h2><div class="seg" role="group" aria-label="スキルの自動習得" id="skAutoSeg"><button type="button" data-ska="0">手動</button><button type="button" data-ska="1">自動</button></div></div>
+        <p class="hint" id="skAutoTxt" role="status"></p>
+        <label class="chk"><input type="checkbox" id="skProofChk"> 目標に届いたら、残りのSPを勇者の証に振る</label>
+        <div class="btnrow"><button type="button" class="btn ghost sm" id="skPlanSave">いまの振り方を目標にする</button><button type="button" class="btn ghost sm" id="skPlanMax">目標をすべて最大にする</button></div>
+      </div>
+      <div class="cols" aria-hidden="true"><span>攻め</span><span></span><span>守り</span><span></span><span>成長</span></div>
+      <div class="tree" id="tree"></div>
+      <div class="card detail" id="detail"></div>
+      <div class="btnrow"><button type="button" class="btn ghost" id="skReset">スキルを振り直す</button></div>
+    </section>
+
+    <section id="tab-dun" class="pane" hidden>
+      <div class="keys">
+        <div><div class="sub">ダンジョンの鍵</div><div class="keypips" id="keyPips"></div></div>
+        <p class="hint" id="keyNext"></p>
+      </div>
+      <p class="lead">鍵を1本使って挑戦します。制限時間内に、1階ごとに強くなる敵を倒して進みます。5階ごとに番人が現れます。力尽きても失うものはありません。</p>
+      <div class="card qk">
+        <div class="sp-head"><h2 class="sub">クイック受け取り</h2><div class="seg" role="group" aria-label="クイック受け取りで使う鍵" id="qkSeg"><button type="button" data-qk="1">1本ずつ</button><button type="button" data-qk="all">まとめて</button></div></div>
+        <p class="hint">「クイック」を押すと、鍵を使ってその場で最後まで戦った結果になり、報酬をすぐに受け取れます。いまの強さで実際に戦うのと同じ計算です。「まとめて」にすると、持っている鍵をすべて使います。</p>
+      </div>
+      <p class="hint" id="dunLvl"></p>
+      <div class="dlist" id="dunList"></div>
+      <p class="hint">挑戦中に画面を閉じると、その時点で帰還します。それまでに手に入れた報酬は残ります。</p>
+    </section>
+
+    <section id="tab-coop" class="pane" hidden>
+      <section class="card cf" id="cfBox" hidden>
+        <div class="cf-head"><b id="cfName"></b><span class="hint" id="cfInfo"></span></div>
+        <div class="cfrow" id="cfFoes"></div>
+        <div class="vs2" aria-hidden="true">対</div>
+        <div class="cfrow" id="cfParty"></div>
+        <p class="hint" id="cfLog"></p>
+      </section>
+      <section class="card report" id="cfRes" hidden>
+        <h2 id="cfResT"></h2>
+        <p id="cfResTxt"></p>
+        <div class="btnrow"><button type="button" class="btn" id="cfResClose">閉じる</button></div>
+      </section>
+      <div class="card">
+        <h2 class="sub">パーティ</h2>
+        <div id="ptBox"></div>
+        <p class="hint" id="netMsg" role="status"></p>
+      </div>
+      <div class="field"><label class="sub" for="nickIn">プレイヤー名</label><input id="nickIn" maxlength="12" autocomplete="off" placeholder="冒険者"></div>
+      <h2 class="sub">協力ステージ</h2>
+      <p class="lead">3つのウェーブを120秒以内に倒しきるとクリアです。人数が多いほど敵は強くなり、報酬も増えます。各ステージには属性があり、弱点の属性の武器なら与えるダメージ ×1.5、弱点の属性の防具なら受けるダメージ ×0.7 になります。報酬の装備はステージと同じ属性です。</p>
+      <div class="clist" id="coopList"></div>
+    </section>
+
+    <section id="tab-reb" class="pane" hidden>
+      <div class="soulhead">
+        <div><div class="sub">魂</div><div class="soul-big" id="soulBig">0</div></div>
+        <p class="hint" id="rebCount"></p>
+      </div>
+      <div class="card reb">
+        <h2 class="sub">転生</h2>
+        <div id="rebBody"></div>
+        <div class="btnrow"><button type="button" class="btn" id="rebBtn">転生する</button></div>
+        <p class="hint">レベル、ゴールド、鍛錬、スキル、ステージは最初に戻ります。魂、祭壇の強化、職業、装備と鉱石、ダンジョンと協力ステージの記録、鍵は残ります。</p>
+      </div>
+      <h2 class="sub">魂の祭壇</h2>
+      <p class="lead">魂を使って、転生しても消えない力を得ます。上の4つは何度でも強化でき、効果は掛け算で重なります。</p>
+      <div id="soulList"></div>
+      <div class="card awk" id="awkCard">
+        <div class="soulhead"><div><div class="sub">覚醒と星</div><div class="star-big" id="starBig">0</div></div><p class="hint" id="awkCount"></p></div>
+        <div id="awkBody"></div>
+        <div class="btnrow"><button type="button" class="btn" id="awkBtn">覚醒する</button></div>
+        <p class="hint">覚醒は転生のさらに上の周回です。転生でリセットされるものに加えて、魂と、魂の祭壇の上4つ(刃・盾・叡智・財宝)が0に戻ります。砂時計・記憶の継承・夢の回廊・鍵守り、転生の回数、仲間、装備と鉱石、熟練度、実績と称号は残ります。</p>
+      </div>
+      <div class="pane" id="starSec" hidden>
+        <h2 class="sub">星の祭壇</h2>
+        <p class="lead">星を使って、覚醒しても消えない力を得ます。上の4つは何度でも強化でき、効果は掛け算で重なります。</p>
+        <div id="starList"></div>
+        <div class="card" id="autoBox" hidden>
+          <h2 class="sub">自動化の設定</h2>
+          <div class="field" id="arebBox"><label class="sub" for="optReb">自動転生</label><select id="optReb"></select></div>
+          <p class="hint" id="autoNote"></p>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-log" class="pane" hidden>
+      <div class="seg wide" role="group" aria-label="記録の種類" id="logSeg">
+        <button type="button" data-lv="ach" aria-pressed="true">実績<i id="bdAch" hidden></i></button>
+        <button type="button" data-lv="ttl" aria-pressed="false">称号</button>
+        <button type="button" data-lv="rec" aria-pressed="false">記録</button>
+      </div>
+      <div class="pane" id="lv-ach">
+        <div class="card achsum">
+          <div class="sp-head"><div><div class="sub">達成した実績</div><div class="ach-big" id="achBig"></div></div><p class="hint" id="achNote"></p></div>
+        </div>
+        <div id="achList"></div>
+      </div>
+      <div class="pane" id="lv-ttl" hidden>
+        <p class="lead">称号は1つだけ付けられます。付けた称号は戦闘画面と協力プレイのパーティに表示され、それぞれに小さな効果があります。称号は実績を達成すると増えます。</p>
+        <div id="ttlList"></div>
+      </div>
+      <div class="pane" id="lv-rec" hidden>
+      <dl class="rec" id="rec"></dl>
+      <div class="card">
+        <h2 class="sub">放置のしくみ</h2>
+        <p class="hint" id="offInfo"></p>
+      </div>
+      <div class="card">
+        <h2 class="sub">セーブ</h2>
+        <p class="hint">進行はこのブラウザに自動保存されます。別の端末で続けるときは、コードをコピーして貼り付けます。</p>
+        <div class="btnrow"><button type="button" class="btn" id="saveCopy">コードをコピー</button></div>
+        <textarea id="saveBox" rows="3" aria-label="セーブコード" placeholder="ここにセーブコードを貼り付け"></textarea>
+        <div class="btnrow"><button type="button" class="btn ghost" id="saveLoad">上書きして読み込む</button></div>
+        <p class="hint" id="saveMsg" role="status"></p>
+      </div>
+      <div class="btnrow"><button type="button" class="btn danger" id="hardReset">最初からやり直す</button></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<nav class="tabs" aria-label="メニュー">
+  <div>
+    <button type="button" class="tab" data-tab="battle" aria-selected="true"><span class="ti" aria-hidden="true">剣</span>戦闘</button>
+    <button type="button" class="tab" data-tab="train" aria-selected="false"><span class="ti" aria-hidden="true">鎚</span>育成<i id="bdTrain" hidden></i></button>
+    <button type="button" class="tab" data-tab="skill" aria-selected="false"><span class="ti" aria-hidden="true">技</span>スキル<i id="bdSkill" hidden></i></button>
+    <button type="button" class="tab" data-tab="dun" aria-selected="false"><span class="ti" aria-hidden="true">門</span>ダンジョン<i id="bdDun" hidden></i></button>
+    <button type="button" class="tab" data-tab="coop" aria-selected="false"><span class="ti" aria-hidden="true">協</span>協力<i id="bdCoop" hidden></i></button>
+    <button type="button" class="tab" data-tab="reb" aria-selected="false"><span class="ti" aria-hidden="true">魂</span>転生<i id="bdReb" hidden></i></button>
+  </div>
+</nav>
+
+<script>
+/* 放置勇者 ブラウザ版の協力プレイ通信。
+   Claude の claude.use('room') と同じ形(presence / onPeers / join / leave)を、WebRTC で用意します。
+   - 相手を見つけるための合図(シグナリング)は、無料の公開 PeerJS サーバー(0.peerjs.com)を使います。
+   - パーティを作った人が「ハブ」になり、全員の presence を集めて配り直します。
+   - 直接つながらないとき(8秒たってもデータの通り道が開かないとき)は、合図のサーバー経由で送ります。
+   Claude 上(window.claude があるとき)では何もしません。 */
+(function(){
+  if(window.claude&&typeof window.claude.use==='function')return;
+  var SIG={host:'0.peerjs.com',port:443,secure:true,path:'/',key:'peerjs'};
+  var o=window.IH_SIG||{};for(var k in o)SIG[k]=o[k];
+  var ICE={iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:['turn:eu-0.turn.peerjs.com:3478','turn:us-0.turn.peerjs.com:3478'],username:'peerjs',credential:'peerjsp'}]};
+  var PFX='idlehero2-',TICK=5000,LOST=20000,FALLBACK=8000,MAXN=4;
+  var HAS_RTC=typeof RTCPeerConnection==='function'&&!window.IH_NO_RTC;
+  function rid(n){var a='abcdefghijkmnpqrstuvwxyz23456789',s='';for(var i=0;i<n;i++)s+=a[Math.floor(Math.random()*a.length)];return s;}
+  function err(code){var e=new Error(code);e.code=code;return e;}
+  function clone(v){return JSON.parse(JSON.stringify(v));}
+
+  /* the signalling socket (PeerJS server protocol) */
+  function Sig(id){
+    var self=this;this.id=id;this.h={};this.open=false;this.onclose=null;
+    var url=(SIG.secure?'wss':'ws')+'://'+SIG.host+':'+SIG.port+SIG.path+'peerjs?key='+encodeURIComponent(SIG.key)+'&id='+encodeURIComponent(id)+'&token='+rid(12)+'&version=1.5.4';
+    this.ready=new Promise(function(res,rej){
+      var t=setTimeout(function(){rej(err('net'));self.close();},12000);
+      try{self.ws=new WebSocket(url);}catch(e){clearTimeout(t);rej(err('net'));return;}
+      self.ws.onmessage=function(ev){
+        var m;try{m=JSON.parse(ev.data);}catch(e){return;}
+        if(m.type==='OPEN'){clearTimeout(t);self.open=true;res();return;}
+        if(m.type==='ID-TAKEN'){clearTimeout(t);rej(err('taken'));return;}
+        if(m.type==='ERROR'&&!self.open){clearTimeout(t);rej(err('net'));return;}
+        var f=self.h[m.type];if(f)f(m);
+      };
+      self.ws.onerror=function(){if(!self.open){clearTimeout(t);rej(err('net'));}};
+      self.ws.onclose=function(){var was=self.open;self.open=false;if(!was){clearTimeout(t);rej(err('net'));}if(self.onclose)self.onclose();};
+    });
+    this.hb=setInterval(function(){self.send({type:'HEARTBEAT'});},TICK);
+  }
+  Sig.prototype.send=function(m){if(this.ws&&this.ws.readyState===1)this.ws.send(JSON.stringify(m));};
+  Sig.prototype.close=function(){clearInterval(this.hb);this.onclose=null;try{if(this.ws)this.ws.close();}catch(e){}};
+
+  /* one connection to one other player: a WebRTC data channel, or the signalling server as a relay */
+  function Link(sig,remote,initiator){
+    var L=this;this.sig=sig;this.remote=remote;this.dc=null;this.relay=!HAS_RTC;this.opened=false;this.onopen=null;this.onmsg=null;this.pc=null;this.cq=[];
+    if(HAS_RTC){
+      this.pc=new RTCPeerConnection(ICE);
+      this.pc.onicecandidate=function(e){if(e.candidate)sig.send({type:'CANDIDATE',dst:remote,payload:{c:e.candidate.toJSON?e.candidate.toJSON():e.candidate}});};
+      this.pc.onconnectionstatechange=function(){if(L.pc&&L.pc.connectionState==='failed')L.useRelay();};
+      var wire=function(dc){L.dc=dc;dc.onopen=function(){L.fireOpen();};dc.onmessage=function(e){L.got(e.data);};};
+      if(initiator)wire(this.pc.createDataChannel('g',{ordered:true}));
+      else this.pc.ondatachannel=function(e){wire(e.channel);};
+      this.fb=setTimeout(function(){if(!L.isOpen())L.useRelay();},FALLBACK);
+    }
+  }
+  Link.prototype.isOpen=function(){return this.relay||!!(this.dc&&this.dc.readyState==='open');};
+  Link.prototype.fireOpen=function(){if(this.opened)return;this.opened=true;if(this.onopen)this.onopen();};
+  Link.prototype.useRelay=function(){if(this.relay)return;this.relay=true;this.fireOpen();};
+  Link.prototype.send=function(o){
+    var s=JSON.stringify(o);
+    if(this.dc&&this.dc.readyState==='open'){try{this.dc.send(s);return;}catch(e){}}
+    if(this.relay)this.sig.send({type:'CANDIDATE',dst:this.remote,payload:{g:s}});
+  };
+  Link.prototype.got=function(s){var m;try{m=JSON.parse(s);}catch(e){return;}if(this.onmsg)this.onmsg(m);};
+  Link.prototype.signal=function(m){
+    var L=this,p=m.payload||{};
+    if(typeof p.g==='string'){if(!this.relay&&!(this.dc&&this.dc.readyState==='open')){this.relay=true;this.fireOpen();}this.got(p.g);return;}
+    if(!this.pc)return;
+    if(m.type==='ANSWER'&&p.sdp)this.pc.setRemoteDescription(p.sdp).then(function(){L.flush();}).catch(function(){L.useRelay();});
+    else if(m.type==='CANDIDATE'&&p.c){if(this.pc.remoteDescription)this.pc.addIceCandidate(p.c).catch(function(){});else this.cq.push(p.c);}
+  };
+  Link.prototype.flush=function(){var L=this;this.cq.splice(0).forEach(function(c){L.pc.addIceCandidate(c).catch(function(){});});};
+  Link.prototype.offer=function(){
+    var L=this;
+    if(!this.pc){this.relay=true;this.fireOpen();return;}
+    this.pc.createOffer().then(function(d){return L.pc.setLocalDescription(d);}).then(function(){
+      var d=L.pc.localDescription;L.sig.send({type:'OFFER',dst:L.remote,payload:{sdp:{type:d.type,sdp:d.sdp},type:'data'}});
+    }).catch(function(){L.useRelay();});
+  };
+  Link.prototype.answer=function(sdp){
+    var L=this;if(!this.pc)return;
+    this.pc.setRemoteDescription(sdp).then(function(){L.flush();return L.pc.createAnswer();}).then(function(d){return L.pc.setLocalDescription(d);}).then(function(){
+      var d=L.pc.localDescription;L.sig.send({type:'ANSWER',dst:L.remote,payload:{sdp:{type:d.type,sdp:d.sdp},type:'data'}});
+    }).catch(function(){L.useRelay();});
+  };
+  Link.prototype.close=function(){clearTimeout(this.fb);try{if(this.dc)this.dc.close();}catch(e){}try{if(this.pc)this.pc.close();}catch(e){}this.onmsg=null;this.onopen=null;};
+
+  /* a party: the same shape as a joined Claude room */
+  function party(name,opt){
+    var code=String(name).replace(/^pt-/,''),hubId=PFX+code,host=!!(opt&&opt.host);
+    var myId=host?hubId:hubId+'-'+rid(6);
+    var P={pres:{},seen:{},handlers:[],closers:[],mine:{},links:{},closed:false,last:Date.now(),t:0,timer:0};
+    P.pres[myId]={presence:{},updatedAt:Date.now()};
+    var sig=new Sig(myId);
+    function snap(){var out=[];for(var p in P.pres)out.push(Object.freeze({peer:p,by:null,isMe:p===myId,sameTab:p===myId,kind:'viewer',guest:false,presence:Object.freeze(clone(P.pres[p].presence)),updatedAt:P.pres[p].updatedAt}));out.sort(function(a,b){return a.peer<b.peer?-1:1;});return Object.freeze(out);}
+    function fire(){if(P.t||P.closed)return;P.t=setTimeout(function(){P.t=0;if(P.closed)return;var ps=snap();P.handlers.slice().forEach(function(h){try{h({peers:ps,joined:[],left:[],updated:[]});}catch(e){console.error(e);}});},16);}
+    function lost(){if(P.closed)return;shut();P.closers.slice().forEach(function(f){try{f({code:'disconnected'});}catch(e){}});}
+    function shut(){P.closed=true;clearInterval(P.timer);clearTimeout(P.t);for(var r in P.links){try{P.links[r].send({t:'bye'});}catch(e){}P.links[r].close();}P.links={};sig.close();}
+    /* hub: collect everyone's presence and hand the whole list back out */
+    function list(){var l=[];for(var p in P.pres)l.push({peer:p,presence:P.pres[p].presence});return l;}
+    function spread(){if(!host)return;var m={t:'all',l:list()};for(var r in P.links)if(P.links[r].isOpen())P.links[r].send(m);fire();}
+    function drop(r){if(P.links[r]){P.links[r].close();delete P.links[r];}delete P.pres[r];delete P.seen[r];}
+    function hubLink(r,initiator){
+      var L=new Link(sig,r,initiator);P.links[r]=L;
+      L.onmsg=function(m){
+        if(m.t==='p'&&m.p&&typeof m.p==='object'){
+          var n=0;for(var q in P.pres)n++;
+          if(!P.pres[r]&&n>=MAXN){L.send({t:'full'});setTimeout(function(){drop(r);},500);return;}
+          P.pres[r]={presence:m.p,updatedAt:Date.now()};P.seen[r]=Date.now();spread();
+        }else if(m.t==='bye'){drop(r);spread();}
+      };
+      return L;
+    }
+    if(host){
+      sig.h.OFFER=function(m){var p=m.payload||{};if(!m.src||!p.sdp||P.closed)return;if(P.links[m.src])drop(m.src);hubLink(m.src,false).answer(p.sdp);};
+      sig.h.ANSWER=sig.h.CANDIDATE=function(m){if(!m.src)return;var L=P.links[m.src];if(!L&&m.payload&&typeof m.payload.g==='string')L=hubLink(m.src,false);if(L)L.signal(m);};
+      sig.h.EXPIRE=function(m){if(m.src&&P.links[m.src]){drop(m.src);spread();}};
+    }
+    var api={name:name,
+      presence:function(patch){
+        if(P.closed)return Promise.resolve();
+        for(var k in patch){if(patch[k]===null)delete P.mine[k];else P.mine[k]=clone(patch[k]);}
+        P.pres[myId]={presence:clone(P.mine),updatedAt:Date.now()};
+        if(host)spread();else{var L=P.links[hubId];if(L&&L.isOpen())L.send({t:'p',p:P.mine});fire();}
+        return Promise.resolve();
+      },
+      onPeers:function(h,onClose){P.handlers.push(h);if(onClose)P.closers.push(onClose);fire();return function(){var i=P.handlers.indexOf(h);if(i>=0)P.handlers.splice(i,1);i=P.closers.indexOf(onClose);if(i>=0)P.closers.splice(i,1);};},
+      peers:function(){return snap();},
+      leave:function(){if(!P.closed)shut();return Promise.resolve();},
+      emit:function(){return Promise.resolve();},on:function(){return function(){};},
+      connected:function(){return !P.closed;}
+    };
+    window.addEventListener('pagehide',function(){if(!P.closed)shut();});
+    return sig.ready.then(function(){
+      if(host){
+        P.timer=setInterval(function(){var now=Date.now(),ch=false;for(var r in P.seen)if(now-P.seen[r]>LOST){drop(r);ch=true;}spread();},TICK);
+        return api;
+      }
+      return new Promise(function(res,rej){
+        var done=false;
+        function fail(c){if(done)return;done=true;shut();rej(err(c));}
+        var to=setTimeout(function(){fail('net');},25000);
+        var L=new Link(sig,hubId,true);P.links[hubId]=L;
+        sig.h.ANSWER=sig.h.CANDIDATE=function(m){if(m.src===hubId)L.signal(m);};
+        sig.h.EXPIRE=function(m){if(m.src===hubId){if(!done)fail('not_found');else lost();}};
+        sig.onclose=function(){if(!done)fail('net');};
+        L.onopen=function(){L.send({t:'p',p:P.mine});};
+        L.onmsg=function(m){
+          if(m.t==='full'){if(!done)fail('full');else lost();return;}
+          if(m.t==='bye'){if(!done)fail('not_found');else lost();return;}
+          if(m.t==='all'&&m.l&&m.l.length){
+            P.last=Date.now();var np={};
+            m.l.forEach(function(x){if(x&&typeof x.peer==='string'&&x.presence&&typeof x.presence==='object')np[x.peer]={presence:x.presence,updatedAt:Date.now()};});
+            np[myId]={presence:clone(P.mine),updatedAt:Date.now()};P.pres=np;fire();
+            if(!done){done=true;clearTimeout(to);
+              P.timer=setInterval(function(){if(Date.now()-P.last>LOST)lost();else if(L.isOpen())L.send({t:'p',p:P.mine});},TICK);
+              res(api);}
+          }
+        };
+        L.offer();
+      });
+    });
+  }
+
+  /* there is no lobby without a server: open parties are found only by their code */
+  var lobby={
+    presence:function(){return Promise.resolve();},
+    onPeers:function(h){setTimeout(function(){h({peers:[],joined:[],left:[],updated:[]});},0);return function(){};},
+    peers:function(){return [];},
+    join:function(n,opt){return party(n,opt||{});},
+    emit:function(){return Promise.resolve();},on:function(){return function(){};},
+    connected:function(){return true;}
+  };
+  window.claude={use:function(n){return Promise.resolve(n==='room'&&typeof WebSocket==='function'?lobby:null);},p2p:true};
+})();
+
+</script>
+<script>
+(function(){
+// ==ENGINE==
+const KPS=5, VER=3;
+const CFG={hpBase:22,hpG:1.15,atkBase:5,atkG:1.11,defBase:1,defG:1.09,xpBase:6,xpG:1.115,goldBase:3,goldG:1.115,bossHp:4,bossAtk:1.4,bossRew:5};
+const ZONES=[
+  {n:'はじまりの草原',el:null,m:[['スライム','液'],['ゴブリン','鬼'],['野ウサギ','兎']],b:['草原の主','主']},
+  {n:'ささやきの森',el:null,m:[['森オオカミ','狼'],['毒グモ','蜘'],['ツタの怪','蔦']],b:['古木の王','樹']},
+  {n:'くらやみ洞窟',el:null,m:[['コウモリ','翼'],['ガイコツ','骨'],['ゴーレム','岩']],b:['洞窟の竜','竜']},
+  {n:'灼熱の火山',el:null,m:[['炎の精','炎'],['火トカゲ','蜥'],['溶岩ゴーレム','岩']],b:['炎帝','帝']},
+  {n:'凍てつく氷原',el:null,m:[['ユキオオカミ','狼'],['氷の精','氷'],['雪男','雪']],b:['氷の女王','后']},
+  {n:'魔王城',el:null,m:[['暗黒騎士','騎'],['悪魔','魔'],['死神','死']],b:['魔王','王']}
+];
+/* elements: fire beats grass, grass beats water, water beats fire */
+const ELS=['fire','water','grass'],ELN={fire:'火',water:'水',grass:'草'},BEATS={fire:'grass',water:'fire',grass:'water'},WEAK={fire:'water',water:'grass',grass:'fire'};
+function elAtk(a,d){if(!a||!d)return 1;if(BEATS[a]===d)return 1.5;if(BEATS[d]===a)return .7;return 1;}
+function elDef(a,d){if(!a||!d)return 1;if(BEATS[d]===a)return .7;if(BEATS[a]===d)return 1.3;if(a===d)return .85;return 1;}
+/* elAtk plus the title bonus that raises the advantage */
+function elMul(a,d,st){const m=elAtk(a,d);return m>1&&st&&st.eld?m+st.eld:m;}
+/* places: the main line plus three elemental lines the hero can idle in */
+const PLACES=[
+  {id:'main',n:'メイン',g:'剣'},
+  {id:'fire',n:'炎の洞窟',g:'炎',el:'fire',need:11,m:[['火の玉','火'],['サラマンダー','蜥'],['炎の騎士','騎']],b:['炎竜','竜']},
+  {id:'water',n:'水の神殿',g:'水',el:'water',need:11,m:[['水の精','滴'],['半魚人','魚'],['氷の兵','氷']],b:['海竜','龍']},
+  {id:'grass',n:'草の迷宮',g:'草',el:'grass',need:11,m:[['マンドラゴラ','根'],['木の精','木'],['毒花','花']],b:['森の王','樹']}
+];
+const PLM={};PLACES.forEach(function(p){PLM[p.id]=p;});
+const EL_HP=1.25,EL_ATK=1.15;
+const DROP={main:{n:.003,b:.12,w:[70,24,5,1]},el:{n:.01,b:.3,w:[60,28,10,2]}};
+function elZero(){return {fire:{st:1,mx:1,best:1},water:{st:1,mx:1,best:1},grass:{st:1,mx:1,best:1}};}
+function pSt(S){return S.place==='main'||!S.el[S.place]?S.stage:S.el[S.place].st;}
+function pMx(S){return S.place==='main'||!S.el[S.place]?S.maxStage:S.el[S.place].mx;}
+function pSet(S,v){if(S.place==='main'||!S.el[S.place])S.stage=v;else S.el[S.place].st=v;}
+function placeOpen(S,P){return P.id==='main'||Math.max(S.bestStage,S.maxStage)>=P.need;}
+function pLabel(S,stage){return S.place==='main'?stageLabel(stage):'Lv '+stage;}
+function pName(S){return S.place==='main'?zoneName(pSt(S)):PLM[S.place].n;}
+function zoneName(stage){const z=zoneInfo(stage);return (z.loop?'裏・':'')+z.Z.n;}
+function navStage(S,R,to){
+  const mx=pMx(S),cur=pSt(S);
+  const v=Math.max(1,Math.min(mx,to==='max'?mx:cur+to));
+  if(v===cur||S.dun)return false;
+  pSet(S,v);S.kills=0;R.enemy=null;R.wait=.3;
+  S.mode=v<mx?'farm':'advance';
+  return true;
+}
+function setPlace(S,R,id){
+  const P=PLM[id];
+  if(!P||!placeOpen(S,P)||S.place===id||S.dun)return false;
+  S.place=id;S.kills=0;R.enemy=null;R.wait=.4;
+  S.mode=pSt(S)<pMx(S)?'farm':'advance';
+  return true;
+}
+const SK=[
+  {id:'atk1',n:'剛剣',g:'剛',br:'atk',c:0,r:0,p:[],max:5,e:[['攻撃力',10,'%']]},
+  {id:'spd1',n:'疾風',g:'疾',br:'atk',c:0,r:1,p:['atk1'],max:5,e:[['攻撃速度',6,'%']]},
+  {id:'crit1',n:'会心',g:'会',br:'atk',c:0,r:2,p:['spd1'],max:5,e:[['会心率',4,'%']]},
+  {id:'critd',n:'爆裂',g:'爆',br:'atk',c:0,r:3,p:['crit1'],max:5,e:[['会心ダメージ',20,'%']]},
+  {id:'ult',n:'奥義',g:'奥',br:'atk',c:0,r:4,p:['critd'],max:3,e:[['6回目の攻撃の威力',75,'%']]},
+  {id:'hp1',n:'鉄身',g:'体',br:'dfn',c:2,r:0,p:[],max:5,e:[['最大体力',12,'%']]},
+  {id:'def1',n:'堅守',g:'守',br:'dfn',c:2,r:1,p:['hp1'],max:5,e:[['防御力',10,'%']]},
+  {id:'regen',n:'快癒',g:'癒',br:'dfn',c:2,r:2,p:['def1'],max:5,e:[['自然回復',0.8,'%/秒']]},
+  {id:'thorns',n:'反撃',g:'返',br:'dfn',c:2,r:3,p:['regen'],max:5,e:[['受けたダメージの反射',8,'%']]},
+  {id:'kongo',n:'金剛',g:'金',br:'dfn',c:2,r:4,p:['thorns'],max:5,e:[['被ダメージ',-6,'%']]},
+  {id:'xp1',n:'学び',g:'学',br:'gro',c:4,r:0,p:[],max:5,e:[['獲得経験値',12,'%']]},
+  {id:'gold1',n:'財運',g:'財',br:'gro',c:4,r:1,p:['xp1'],max:5,e:[['獲得ゴールド',12,'%']]},
+  {id:'offline',n:'安眠',g:'眠',br:'gro',c:4,r:2,p:['gold1'],max:5,e:[['放置中の効率',10,'%']]},
+  {id:'dream',n:'長い夢',g:'夢',br:'gro',c:4,r:3,p:['offline'],max:5,e:[['放置の上限',2,'時間']]},
+  {id:'king',n:'覇気',g:'王',br:'gro',c:4,r:4,p:['dream'],max:3,e:[['経験値とゴールド',10,'%']]},
+  {id:'blade',n:'剣盾一体',g:'融',br:'hyb',c:1,r:2,p:['spd1','def1'],max:5,e:[['攻撃力',4,'%'],['防御力',4,'%']]},
+  {id:'chiyu',n:'知勇',g:'智',br:'hyb',c:3,r:2,p:['def1','gold1'],max:5,e:[['獲得経験値',8,'%'],['最大体力',4,'%']]},
+  {id:'dbl',n:'連撃',g:'連',br:'atk',c:0,r:5,p:['ult'],max:5,e:[['もう1回攻撃する確率',6,'%']]},
+  {id:'pierce',n:'貫通',g:'貫',br:'atk',c:0,r:6,p:['dbl'],max:5,e:[['敵の防御を無視',12,'%']]},
+  {id:'master',n:'剣聖',g:'聖',br:'atk',c:0,r:7,p:['pierce'],max:3,e:[['攻撃力',25,'%'],['会心率',5,'%']]},
+  {id:'dodge',n:'見切り',g:'見',br:'dfn',c:2,r:5,p:['kongo'],max:5,e:[['回避率',4,'%']]},
+  {id:'leech',n:'吸命',g:'吸',br:'dfn',c:2,r:6,p:['dodge'],max:5,e:[['与えたダメージを体力に',2,'%']]},
+  {id:'guts',n:'不屈',g:'屈',br:'dfn',c:2,r:7,p:['leech'],max:3,e:[['倒れる攻撃を敵ごとに1回耐え、体力回復',20,'%']]},
+  {id:'thrift',n:'節約',g:'節',br:'gro',c:4,r:5,p:['king'],max:5,e:[['鍛錬の費用',-5,'%']]},
+  {id:'loot',n:'宝探し',g:'探',br:'gro',c:4,r:6,p:['thrift'],max:5,e:[['ダンジョンの経験値とゴールド',20,'%']]},
+  {id:'haste',n:'時の加速',g:'時',br:'gro',c:4,r:7,p:['loot'],max:4,e:[['ゲーム速度',5,'%']]},
+  {id:'slayer',n:'討伐',g:'討',br:'hyb',c:1,r:5,p:['ult','kongo'],max:5,e:[['ボスと番人への与ダメージ',15,'%']]},
+  {id:'reso',n:'魂の共鳴',g:'響',br:'hyb',c:3,r:5,p:['kongo','king'],max:5,e:[['転生で得る魂',10,'%']]},
+  {id:'mastery',n:'極意',g:'極',br:'hyb',c:1,r:7,p:['pierce','leech'],max:5,e:[['攻撃力',6,'%'],['防御力',6,'%'],['最大体力',6,'%']]},
+  {id:'dtime',n:'刻読み',g:'刻',br:'hyb',c:3,r:7,p:['leech','loot'],max:5,e:[['ダンジョンの制限時間',6,'秒']]},
+  {id:'proof',n:'勇者の証',g:'証',br:'cap',c:2,r:8,p:['master','guts','haste'],max:Infinity,grow:1.2,e:[['攻撃力・防御力・最大体力',10,'%'],['経験値とゴールド',10,'%']]}
+];
+const SK_ROWS=9;
+const SKM={};SK.forEach(s=>{SKM[s.id]=s;});
+const TR={
+  atk:{n:'武器の鍛錬',u:'攻撃力',base:15,gr:1.17,per:3,unit:''},
+  hp:{n:'体の鍛錬',u:'最大体力',base:15,gr:1.17,per:25,unit:''},
+  def:{n:'防具の鍛錬',u:'防御力',base:20,gr:1.17,per:1.5,unit:''},
+  reg:{n:'回復の鍛錬',u:'自然回復',base:60,gr:1.24,per:.1,unit:'%/秒',max:40},
+  spd:{n:'速さの鍛錬',u:'攻撃速度',base:80,gr:1.24,per:2,unit:'%',max:50},
+  crt:{n:'集中の鍛錬',u:'会心率',base:70,gr:1.24,per:.5,unit:'%',max:60},
+  cdm:{n:'破壊の鍛錬',u:'会心ダメージ',base:70,gr:1.22,per:4,unit:'%',max:100},
+  dge:{n:'身のこなし',u:'回避率',base:120,gr:1.25,per:.4,unit:'%',max:50},
+  gld:{n:'商いの心得',u:'獲得ゴールド',base:150,gr:1.2,per:3,unit:'%'},
+  exp:{n:'学びの心得',u:'獲得経験値',base:150,gr:1.2,per:3,unit:'%'}
+};
+const TRK=Object.keys(TR);
+function trainZero(){const o={};TRK.forEach(function(k){o[k]=0;});return o;}
+function trainCost(k,lv,S){const t=TR[k];return Math.floor(t.base*Math.pow(t.gr,lv)*(S?1-.05*((S.skills&&S.skills.thrift)||0):1));}
+const CLS=[
+  {id:'hero',n:'勇者',g:'勇',d:'すべてが平均的なバランス型。獲得経験値 +15%。',co:'鼓舞: 生きている間、味方全員の攻撃力 +10%',atk:1,hp:1,def:1,spd:1,xp:.15},
+  {id:'warrior',n:'戦士',g:'戦',d:'体力と防御が高く、被ダメージ -10%。攻撃はやや遅い。',co:'挑発: 敵の攻撃を自分に引きつける',atk:.9,hp:1.5,def:1.4,spd:.95,red:.1},
+  {id:'mage',n:'魔術師',g:'魔',d:'攻撃力が高く、敵の防御を30%無視。体力と防御は低い。',co:'範囲魔法: 与えたダメージの半分が他の敵にも届く',atk:1.45,hp:.75,def:.7,spd:.95,pierce:.3},
+  {id:'healer',n:'ヒーラー',g:'癒',d:'攻撃は低いが、自然回復 +1.5%/秒。',co:'回復と蘇生: 傷ついた味方を回復し、倒れた味方を起こす',atk:.75,hp:1.05,def:1,spd:1,regen:.015},
+  {id:'thief',n:'盗賊',g:'盗',d:'攻撃が速く、会心率 +10%・回避率 +8%・獲得ゴールド +25%。打たれ弱い。',co:'盗む: パーティ全員の報酬ゴールド +10%',atk:.9,hp:.85,def:.85,spd:1.3,crit:.1,dodge:.08,gold:.25},
+  {id:'archer',n:'弓使い',g:'弓',d:'会心ダメージ +60%。ボスと番人への与ダメージ +25%。',co:'狙い撃ち: いちばん体力の多い敵を優先して狙う',atk:1.1,hp:.85,def:.85,spd:1,critD:.6,boss:.25}
+];
+const CLSM={};CLS.forEach(function(c){CLSM[c.id]=c;});
+/* class mastery: kills as the current class raise its mastery; points buy that class's own tree */
+const MAST_MAX=60,MCOST=[1,2,3,5];
+function mastNeed(L){return Math.floor(25*Math.pow(L,1.25));}
+function mastPts(lv){return lv-1+Math.floor(lv/10);}
+const MFX={atk:['攻撃力',100,'%'],hp:['最大体力',100,'%'],def:['防御力',100,'%'],crit:['会心率',100,'%'],critD:['会心ダメージ',100,'%'],spd:['攻撃速度',100,'%'],regen:['自然回復',100,'%/秒'],red:['被ダメージ',-100,'%'],xp:['獲得経験値',100,'%'],gold:['獲得ゴールド',100,'%'],dbl:['連撃',100,'%'],pierce:['敵の防御を無視',100,'%'],dodge:['回避率',100,'%'],leech:['吸命',100,'%'],guts:['不屈で耐える体力',100,'%'],slayer:['ボス・番人への与ダメージ',100,'%'],thorns:['反撃',100,'%'],drop:['装備のドロップ率',100,'%'],au:['協力: 鼓舞の攻撃力',100,'%'],tt:['協力: 敵を引きつける確率',100,'%'],spl:['協力: 範囲魔法の割合',100,'%'],hl:['協力: 回復量(最大体力に対して)',100,'%'],rvc:['協力: 蘇生までの時間',-1,'秒'],stl:['協力: 報酬ゴールド',100,'%']};
+const MT={
+  hero:[
+    {id:'h1',n:'勇気',g:'気',r:0,c:0,max:5,fx:{atk:.04}},{id:'h2',n:'不撓',g:'撓',r:0,c:1,max:5,fx:{hp:.04}},{id:'h3',n:'学習',g:'習',r:0,c:2,max:5,fx:{xp:.05}},
+    {id:'h4',n:'剣技',g:'技',r:1,c:0,max:4,fx:{crit:.02}},{id:'h5',n:'守護',g:'護',r:1,c:1,max:4,fx:{def:.05}},{id:'h6',n:'鼓舞の歌',g:'歌',r:1,c:2,max:4,fx:{au:.03}},
+    {id:'h7',n:'勇者の一撃',g:'撃',r:2,c:0,max:3,fx:{slayer:.1}},{id:'h8',n:'光の加護',g:'光',r:2,c:1,max:3,fx:{red:.04}},{id:'h9',n:'凱旋',g:'凱',r:2,c:2,max:3,fx:{gold:.08}},
+    {id:'h10',n:'真の勇者',g:'真',r:3,c:1,max:5,fx:{atk:.06,hp:.06,def:.06}}],
+  warrior:[
+    {id:'w1',n:'鋼の体',g:'鋼',r:0,c:0,max:5,fx:{hp:.05}},{id:'w2',n:'重装',g:'装',r:0,c:1,max:5,fx:{def:.05}},{id:'w3',n:'闘志',g:'闘',r:0,c:2,max:5,fx:{atk:.03}},
+    {id:'w4',n:'挑発の極意',g:'挑',r:1,c:0,max:4,fx:{tt:.05}},{id:'w5',n:'鉄壁',g:'壁',r:1,c:1,max:4,fx:{red:.04}},{id:'w6',n:'反撃の構え',g:'構',r:1,c:2,max:4,fx:{thorns:.05}},
+    {id:'w7',n:'不屈の魂',g:'魂',r:2,c:0,max:3,fx:{guts:.15}},{id:'w8',n:'剛腕',g:'腕',r:2,c:1,max:3,fx:{critD:.15}},{id:'w9',n:'自己再生',g:'再',r:2,c:2,max:3,fx:{regen:.004}},
+    {id:'w10',n:'守護神',g:'神',r:3,c:1,max:5,fx:{hp:.08,def:.08}}],
+  mage:[
+    {id:'m1',n:'魔力',g:'力',r:0,c:0,max:5,fx:{atk:.05}},{id:'m2',n:'集中',g:'集',r:0,c:1,max:5,fx:{crit:.015}},{id:'m3',n:'詠唱短縮',g:'詠',r:0,c:2,max:5,fx:{spd:.03}},
+    {id:'m4',n:'拡散魔法',g:'散',r:1,c:0,max:4,fx:{spl:.1}},{id:'m5',n:'魔力貫通',g:'貫',r:1,c:1,max:4,fx:{pierce:.05}},{id:'m6',n:'魔力の盾',g:'盾',r:1,c:2,max:4,fx:{red:.03}},
+    {id:'m7',n:'連続詠唱',g:'連',r:2,c:0,max:3,fx:{dbl:.04}},{id:'m8',n:'魔力暴走',g:'暴',r:2,c:1,max:3,fx:{critD:.2}},{id:'m9',n:'知識の泉',g:'泉',r:2,c:2,max:3,fx:{xp:.1}},
+    {id:'m10',n:'大魔導士',g:'導',r:3,c:1,max:5,fx:{atk:.12}}],
+  healer:[
+    {id:'c1',n:'癒しの心',g:'心',r:0,c:0,max:5,fx:{regen:.003}},{id:'c2',n:'祈り',g:'祈',r:0,c:1,max:5,fx:{hp:.04}},{id:'c3',n:'慈愛',g:'慈',r:0,c:2,max:5,fx:{def:.04}},
+    {id:'c4',n:'大回復',g:'回',r:1,c:0,max:4,fx:{hl:.04}},{id:'c5',n:'蘇生術',g:'蘇',r:1,c:1,max:4,fx:{rvc:1}},{id:'c6',n:'吸収の祈り',g:'吸',r:1,c:2,max:4,fx:{leech:.01}},
+    {id:'c7',n:'聖なる光',g:'聖',r:2,c:0,max:3,fx:{atk:.06}},{id:'c8',n:'守りの加護',g:'守',r:2,c:1,max:3,fx:{red:.04}},{id:'c9',n:'天使の加護',g:'天',r:2,c:2,max:3,fx:{guts:.15}},
+    {id:'c10',n:'聖女の奇跡',g:'奇',r:3,c:1,max:5,fx:{regen:.005,hp:.05}}],
+  thief:[
+    {id:'t1',n:'素早さ',g:'速',r:0,c:0,max:5,fx:{spd:.03}},{id:'t2',n:'急所狙い',g:'急',r:0,c:1,max:5,fx:{crit:.015}},{id:'t3',n:'盗みの技',g:'盗',r:0,c:2,max:5,fx:{gold:.06}},
+    {id:'t4',n:'影歩き',g:'影',r:1,c:0,max:4,fx:{dodge:.015}},{id:'t5',n:'二刀流',g:'刀',r:1,c:1,max:4,fx:{dbl:.04}},{id:'t6',n:'目利き',g:'目',r:1,c:2,max:4,fx:{drop:.1}},
+    {id:'t7',n:'暗殺',g:'暗',r:2,c:0,max:3,fx:{critD:.2}},{id:'t8',n:'大泥棒',g:'泥',r:2,c:1,max:3,fx:{stl:.05}},{id:'t9',n:'毒の刃',g:'毒',r:2,c:2,max:3,fx:{atk:.06}},
+    {id:'t10',n:'怪盗',g:'怪',r:3,c:1,max:5,fx:{gold:.1,dodge:.01}}],
+  archer:[
+    {id:'a1',n:'鷹の目',g:'鷹',r:0,c:0,max:5,fx:{crit:.015}},{id:'a2',n:'弓術',g:'術',r:0,c:1,max:5,fx:{atk:.04}},{id:'a3',n:'速射',g:'射',r:0,c:2,max:5,fx:{spd:.03}},
+    {id:'a4',n:'狙撃',g:'狙',r:1,c:0,max:4,fx:{critD:.15}},{id:'a5',n:'大物狩り',g:'狩',r:1,c:1,max:4,fx:{slayer:.08}},{id:'a6',n:'貫く矢',g:'矢',r:1,c:2,max:4,fx:{pierce:.05}},
+    {id:'a7',n:'連射',g:'連',r:2,c:0,max:3,fx:{dbl:.04}},{id:'a8',n:'狩人の知恵',g:'知',r:2,c:1,max:3,fx:{xp:.08}},{id:'a9',n:'身軽',g:'軽',r:2,c:2,max:3,fx:{dodge:.015}},
+    {id:'a10',n:'百発百中',g:'中',r:3,c:1,max:5,fx:{crit:.02,critD:.2}}]
+};
+const MTM={};Object.keys(MT).forEach(function(c){MT[c].forEach(function(d){d.cls=c;MTM[d.id]=d;});});
+function mastZero(){const o={};CLS.forEach(function(c){o[c.id]={lv:1,xp:0,n:{}};});return o;}
+function mastOf(S,cls){return S.mast?S.mast[cls||S.cls]:null;}
+function mastGain(S,x){const m=mastOf(S);if(!m||m.lv>=MAST_MAX||!(x>0))return 0;x*=1+(ttlFx(S).mast||0);m.xp+=x;let up=0;while(m.lv<MAST_MAX&&m.xp>=mastNeed(m.lv)){m.xp-=mastNeed(m.lv);m.lv++;up++;}if(m.lv>=MAST_MAX)m.xp=0;return up;}
+function mastKill(S,R,e){if(mastGain(S,e.boss?10:1))say(R,(CLSM[S.cls]||CLS[0]).n+'の熟練度が Lv '+mastOf(S).lv+' に上がった');}
+function mastSpent(cls,n){let t=0;MT[cls].forEach(function(d){t+=(n[d.id]||0)*MCOST[d.r];});return t;}
+function mastFree(S,cls){cls=cls||S.cls;const m=mastOf(S,cls);return m?mastPts(m.lv)-mastSpent(cls,m.n):0;}
+function mastPre(d){return d.r===0?[]:MT[d.cls].filter(function(x){return d.r===3?x.r===2:(x.r===d.r-1&&x.c===d.c);});}
+function mastCan(S,id){
+  const d=MTM[id];if(!d)return {ok:false,why:''};
+  const m=mastOf(S,d.cls),lv=m.n[id]||0;
+  if(lv>=d.max)return {ok:false,why:'最大レベルです'};
+  const miss=mastPre(d).filter(function(x){return !(m.n[x.id]>0);});
+  if(miss.length)return {ok:false,why:'先に「'+miss.map(function(x){return x.n;}).join('」「')+'」を習得'};
+  if(mastFree(S,d.cls)<MCOST[d.r])return {ok:false,why:'熟練ポイントが足りません'};
+  return {ok:true,cost:MCOST[d.r]};
+}
+function mastLearn(S,id){const r=mastCan(S,id);if(!r.ok)return false;const d=MTM[id],m=mastOf(S,d.cls),b=stats(S).hpMax;m.n[id]=(m.n[id]||0)+1;const a=stats(S).hpMax;if(a>b)S.hp+=a-b;return true;}
+function mastReset(S,cls){const m=mastOf(S,cls);if(!m)return;m.n={};S.hp=Math.min(S.hp,stats(S).hpMax);}
+function mastFx(S){const m=mastOf(S),o={};if(!m||!MT[S.cls])return o;MT[S.cls].forEach(function(d){const lv=m.n[d.id]||0;if(lv)for(const k in d.fx)o[k]=(o[k]||0)+d.fx[k]*lv;});return o;}
+
+const EQS={w:{n:'武器',g:'剣',names:['銅の剣','鉄の剣','鋼の剣','銀の剣','魔法の剣','竜の剣','聖剣','魔剣','神剣']},a:{n:'防具',g:'鎧',names:['布の服','革の鎧','鉄の鎧','鋼の鎧','銀の鎧','魔法の鎧','竜の鎧','聖なる鎧','神の鎧']},r:{n:'装飾品',g:'輪'}};
+const EQK=['w','a','r'];
+const RAR=[{n:'コモン',m:1,sub:0,w:60,ore:2,pre:''},{n:'レア',m:1.8,sub:1,w:28,ore:4,pre:'上質な'},{n:'エピック',m:3,sub:2,w:10,ore:8,pre:'輝く'},{n:'レジェンド',m:5,sub:3,w:2,ore:16,pre:'伝説の'}];
+const EST={atk:['攻撃力','%',10],hp:['最大体力','%',10],def:['防御力','%',10],crt:['会心率','%',2],cdm:['会心ダメージ','%',10],spd:['攻撃速度','%',4],reg:['自然回復','%/秒',.2],dge:['回避率','%',2],gld:['獲得ゴールド','%',8],exp:['獲得経験値','%',8]};
+const ACC={crt:'集中の指輪',cdm:'破壊の腕輪',spd:'疾風の靴',dge:'影のマント',gld:'黄金のお守り',exp:'知恵の首飾り'};
+const INV_MAX=40;
+function eqTier(S){return Math.floor(Math.max(S.bestStage,S.maxStage)/10);}
+/* round to two significant digits */
+function sig2(g){const p=Math.pow(10,Math.max(0,Math.floor(Math.log10(g))-1));return Math.round(g/p)*p;}
+function craftCost(L){return {g:sig2(450*Math.pow(CFG.goldG,10*(L-1))),o:10+4*(L-1)};}
+/* gear past the ninth name is called 改, 改二, 改三 ... so that +N is free for enhancement */
+function kanjiNum(n){const d='〇一二三四五六七八九';n=Math.floor(n);if(n<10)return d[n];if(n<100){const t=Math.floor(n/10),o=n%10;return (t>1?d[t]:'')+'十'+(o?d[o]:'');}return String(n);}
+function kaiName(base,k){return k>0?base+'・改'+(k>1?kanjiNum(k):''):base;}
+function craftMaxLv(S){return eqTier(S)+1;}
+function rollRar(rnd,w){const t=w.reduce(function(a,b){return a+b;},0)*rnd();let s=0;for(let i=0;i<w.length;i++){s+=w[i];if(t<s)return i;}return 0;}
+function makeItem(S,slot,rar,tier,rnd,el){
+  rnd=rnd||Math.random;el=el&&slot!=='r'&&ELN[el]?el:null;
+  const R=RAR[rar],f=1+.12*tier,em=el?1.15:1,v=function(k,m){return Math.round(EST[k][2]*m*f*(.85+.3*rnd())*10)/10;};
+  let main,name;
+  if(slot==='w'){main=[['atk',v('atk',R.m*em)]];name=EQS.w.names[Math.min(tier,8)];}
+  else if(slot==='a'){const x=v('hp',R.m*em);main=[['hp',x],['def',x]];name=EQS.a.names[Math.min(tier,8)];}
+  else{const ks=Object.keys(ACC),k=ks[Math.floor(rnd()*ks.length)];main=[[k,v(k,R.m*.8)]];name=ACC[k];}
+  name=kaiName(name,tier-8);
+  const x=subRoll({m:main,t:tier,r:rar},rnd);
+  S.itemSeq=(S.itemSeq||0)+1;
+  if(rar===3)S.legend=(S.legend|0)+1;
+  return {id:S.itemSeq,s:slot,r:rar,t:tier,nm:R.pre+name,m:main,x:x,el:el,p:0,f:0,os:0};
+}
+function subRoll(it,rnd){
+  const f=1+.12*it.t,pool=Object.keys(EST).filter(function(k){return !it.m.some(function(m){return m[0]===k;});}),x=[];
+  for(let i=0;i<RAR[it.r].sub&&pool.length;i++){const k=pool.splice(Math.floor(rnd()*pool.length),1)[0];x.push([k,Math.round(EST[k][2]*.5*f*(.85+.3*rnd())*10)/10]);}
+  return x;
+}
+function addItem(S,it){if(S.inv.length>=INV_MAX){S.ore+=RAR[it.r].ore;return false;}S.inv.push(it);return true;}
+/* blacksmith: +1..+15 raises the main stats by 10% each; failures add 10% to the next try on that item */
+const ENH_MAX=15,ENH_RATE=[1,1,1,1,1,.9,.8,.7,.6,.5,.4,.35,.3,.25,.2];
+function findItem(S,id){for(const k of EQK){if(S.eq&&S.eq[k]&&S.eq[k].id===id)return S.eq[k];}return S.inv.find(function(x){return x.id===id;})||null;}
+function enhMul(it){return 1+.1*(it.p|0);}
+function enhRate(it,st){return Math.min(1,(ENH_RATE[it.p|0]||0)+.1*(it.f|0)+((st&&st.enh)||0));}
+function enhCost(it){const p=it.p|0;return {o:Math.ceil((3+2*p)*(1+.5*it.r)),g:sig2(craftCost(it.t+1).g*.25*Math.pow(1.3,p))};}
+function refCost(it){return {o:5*(1+it.r),g:sig2(craftCost(it.t+1).g*.2)};}
+function elCost(it){return {o:8+4*it.r,g:sig2(craftCost(it.t+1).g*.2)};}
+function smithPay(S,it,c){if(S.ore<c.o||S.gold<c.g)return false;S.ore-=c.o;S.gold-=c.g;it.os=(it.os||0)+c.o;return true;}
+function keepHp(S,b){const a=stats(S).hpMax;S.hp=b>0?Math.min(a,S.hp*(a/b)):a;}
+function enhance(S,id,rnd){
+  const it=findItem(S,id);if(!it||(it.p|0)>=ENH_MAX)return '';
+  const st=stats(S),r=enhRate(it,st);
+  if(!smithPay(S,it,enhCost(it)))return '';
+  if((rnd||Math.random)()<r){it.p=(it.p|0)+1;it.f=0;if(it.p>(S.enhMax|0))S.enhMax=it.p;keepHp(S,st.hpMax);return 'ok';}
+  it.f=(it.f|0)+1;return 'fail';
+}
+function reforge(S,id,rnd){
+  const it=findItem(S,id);if(!it||!RAR[it.r].sub)return false;
+  const b=stats(S).hpMax;if(!smithPay(S,it,refCost(it)))return false;
+  it.x=subRoll(it,rnd||Math.random);keepHp(S,b);return true;
+}
+function setElem(S,id,el){
+  const it=findItem(S,id);el=ELN[el]?el:null;
+  if(!it||it.s==='r'||(it.el||null)===el)return false;
+  if(!smithPay(S,it,elCost(it)))return false;
+  it.el=el;return true;
+}
+function craft(S,slot,L){
+  L=Math.max(1,Math.min(craftMaxLv(S),(L|0)||craftMaxLv(S)));
+  const c=craftCost(L);
+  if(!EQS[slot]||S.ore<c.o||S.gold<c.g||S.inv.length>=INV_MAX)return null;
+  S.ore-=c.o;S.gold-=c.g;
+  const it=makeItem(S,slot,rollRar(Math.random,RAR.map(function(r){return r.w;})),L-1);
+  S.inv.push(it);return it;
+}
+function equip(S,id){
+  const i=S.inv.findIndex(function(x){return x.id===id;});if(i<0)return false;
+  const it=S.inv[i],b=stats(S).hpMax;
+  S.inv.splice(i,1);
+  if(S.eq[it.s])S.inv.push(S.eq[it.s]);
+  S.eq[it.s]=it;
+  const a=stats(S).hpMax;S.hp=Math.min(a,S.hp*(a/b));
+  return true;
+}
+function unequip(S,slot){const it=S.eq[slot];if(!it||S.inv.length>=INV_MAX)return false;S.eq[slot]=null;S.inv.push(it);S.hp=Math.min(S.hp,stats(S).hpMax);return true;}
+function dismOre(it){return RAR[it.r].ore+Math.floor((it.os||0)*.5);}
+function dismantle(S,id){const i=S.inv.findIndex(function(x){return x.id===id;});if(i<0)return 0;const o=dismOre(S.inv[i]);S.inv.splice(i,1);S.ore+=o;return o;}
+function eqSum(S){
+  const o={};
+  if(S.eq)EQK.forEach(function(k){const it=S.eq[k];if(!it)return;const em=enhMul(it);it.m.forEach(function(p){o[p[0]]=(o[p[0]]||0)+p[1]*em;});it.x.forEach(function(p){o[p[0]]=(o[p[0]]||0)+p[1];});});
+  return o;
+}
+const REB_STAGE=21,DUN_GUARD=5,DUN_MAX=99,DUN_HEAL=.15,DUN_TIME=90;
+const DUN=[
+  {id:'gold',n:'黄金の坑道',g:'金',r:'ゴールドが通常の8倍',t:'敵は硬いが、攻撃は弱い。番人は鉱石 +4',stage:6,m:[['金のスライム','金'],['ミミック','箱'],['黄金像','像']],b:['黄金竜','竜'],hp:1.5,atk:.7,xp:.3,gold:8},
+  {id:'xp',n:'修練の塔',g:'塔',r:'経験値が通常の8倍',t:'敵の一撃が重い。番人は鉱石 +2',stage:11,m:[['木人','木'],['師範代','師'],['幻影剣士','幻']],b:['塔の師範長','長'],hp:.8,atk:1.35,xp:8,gold:.3},
+  {id:'sp',n:'賢者の書庫',g:'書',r:'番人を倒すとスキルポイント +1',t:'敵の攻撃が速い。番人は鉱石 +2',stage:21,m:[['動く魔導書','本'],['インクの精','墨'],['書庫の司書','司']],b:['大賢者','賢'],hp:1,atk:.75,int:1,xp:.6,gold:.6,drop:'sp'},
+  {id:'soul',n:'魂の祠',g:'祠',r:'番人を倒すと魂が手に入る',t:'敵がすべて強い。番人は鉱石 +2',reb:1,m:[['さまよう魂','霊'],['鬼火','灯'],['亡霊騎士','鎧']],b:['冥府の門番','冥'],hp:1.25,atk:1.2,xp:.6,gold:.6,drop:'soul'}
+];
+const DUNM={};DUN.forEach(function(d){DUNM[d.id]=d;});
+const SOUL=[
+  {id:'atk',n:'魂の刃',u:'攻撃力',mul:1.12,base:3,gr:1.22},
+  {id:'def',n:'魂の盾',u:'最大体力と防御力',mul:1.12,base:3,gr:1.22},
+  {id:'xp',n:'魂の叡智',u:'獲得経験値',mul:1.15,base:4,gr:1.22},
+  {id:'gold',n:'魂の財宝',u:'獲得ゴールド',mul:1.15,base:4,gr:1.22},
+  {id:'speed',n:'時の砂時計',e:'ゲーム速度 +10%(戦闘と放置が速くなる)',base:10,gr:2.1,max:20},
+  {id:'mem',n:'記憶の継承',e:'転生直後のSP +2',base:5,gr:1.6,max:10},
+  {id:'dream',n:'夢の回廊',e:'放置効率 +5%(100%まで)、放置上限 +1時間',base:4,gr:1.5,max:10},
+  {id:'key',n:'鍵守り',e:'鍵の最大数 +1、鍵の回復が2分早くなる',base:6,gr:1.8,max:5}
+];
+const SOULM={};SOUL.forEach(function(s){SOULM[s.id]=s;});
+function soLv(S,id){return (S.soul&&S.soul[id])||0;}
+function soMul(S,id){return Math.pow(SOULM[id].mul,soLv(S,id));}
+const REB={base:8,q:1.15};
+function soulCurve(s){return s<REB_STAGE?0:REB.base*Math.pow(REB.q,s-REB_STAGE);}
+function soulCost(id,lv){const s=SOULM[id];return Math.ceil(s.base*Math.pow(s.gr,lv));}
+function keysMax(S){return 3+soLv(S,'key')+stLv(S,'key');}
+function keyInterval(S){return (20-2*soLv(S,'key'))*60;}
+function dunOpen(S,D){return D.reb?S.rebirths>=D.reb:Math.max(S.bestStage,S.maxStage)>=D.stage;}
+function dunBase(S){return Math.max(1,S.maxStage-8);}
+function xpNeed(L){return Math.floor(18*Math.pow(L,1.75));}
+function skillCost(s,lv){const b=[1,1,2,2,3,3,4,4,5][s.r]||5;return s.grow?Math.ceil(b*Math.pow(s.grow,lv||0)):b;}
+function skillSpent(s,lv){let t=0;for(let i=0;i<lv;i++)t+=skillCost(s,i);return t;}
+function zoneInfo(stage){const zi=Math.floor((stage-1)/10);return {zi:zi,Z:ZONES[zi%ZONES.length],loop:Math.floor(zi/ZONES.length),no:((stage-1)%10)+1};}
+function stageLabel(stage){const z=zoneInfo(stage);return (z.zi+1)+'-'+z.no;}
+function defaultState(){return {v:VER,lvl:1,xp:0,gold:0,sp:1,stage:1,kills:0,maxStage:1,mode:'advance',train:trainZero(),skills:{},hp:50,totalKills:0,totalGold:0,deaths:0,playMs:0,savedAt:Date.now(),souls:0,totalSouls:0,rebirths:0,soul:{},bestStage:1,keys:3,keyT:0,dun:null,dunBest:{},
+  cls:'hero',nick:'',eq:{w:null,a:null,r:null},inv:[],ore:0,itemSeq:0,coopMax:0,coopClr:{},place:'main',el:elZero(),autoDis:false,mast:mastZero(),
+  pets:{},party:[],petNew:0,bossKills:0,maxLvl:1,ach:{},achNew:0,title:'',coopBig:0,enhMax:0,legend:0,
+  stars:0,totalStars:0,awk:0,star:{},cycBest:1,autoTr:false,skAuto:false,skPlan:null,skProof:true,autoReb:0,buyN:1,runStart:1,qkAll:false};}
+function newRuntime(){return {enemy:null,ht:0,et:0,hits:0,wait:0,dead:0,ev:[],log:[],acc:null,dunRes:null,pt:[]};}
+function skLv(S,id){return S.skills[id]||0;}
+function stats(S){
+  const l=S.lvl-1,g=function(id){return S.skills[id]||0;},o=function(id){return soLv(S,id);};
+  const T=S.train,t=function(k){return T[k]||0;},c=CLSM[S.cls]||CLS[0],q=eqSum(S),e=function(k){return (q[k]||0)/100;};
+  const M=mastFx(S),mf=function(k){return M[k]||0;};
+  const PB=petBonus(S),pb=function(k){return PB[k]||0;},TF=ttlFx(S),tf=function(k){return TF[k]||0;};
+  const all=1+.1*g('proof'),mast=1+.06*g('mastery'),ach=1+ACH_PER*achPts(S),dex=1+DEX_PER*dexN(S),base=ach*dex;
+  const atk=(6+2.2*l+3*t('atk'))*(1+.10*g('atk1')+.04*g('blade')+.25*g('master'))*soMul(S,'atk')*mast*all*c.atk*(1+e('atk'))*(1+mf('atk'))*(1+pb('atk'))*(1+tf('atk'))*base*stMul(S,'atk');
+  const hpMax=(50+14*l+25*t('hp'))*(1+.12*g('hp1')+.04*g('chiyu'))*soMul(S,'def')*mast*all*c.hp*(1+e('hp'))*(1+mf('hp'))*(1+pb('hp'))*(1+tf('hp'))*base*stMul(S,'def');
+  const def=(1+.9*l+1.5*t('def'))*(1+.10*g('def1')+.04*g('blade'))*soMul(S,'def')*mast*all*c.def*(1+e('def'))*(1+mf('def'))*(1+pb('def'))*(1+tf('def'))*base*stMul(S,'def');
+  const interval=Math.max(.2,1.2/((1+.06*g('spd1')+.02*t('spd')+e('spd')+mf('spd')+pb('spd'))*c.spd));
+  const crit=Math.min(.95,.05+.04*g('crit1')+.05*g('master')+.005*t('crt')+(c.crit||0)+e('crt')+mf('crit')+pb('crt')),critDmg=1.5+.2*g('critd')+.04*t('cdm')+(c.critD||0)+e('cdm')+mf('critD')+pb('cdm');
+  const regen=.004+.008*g('regen')+.001*t('reg')+(c.regen||0)+e('reg')+mf('regen')+pb('reg');
+  const thorns=.08*g('thorns')+mf('thorns'),reduce=Math.max(.15,Math.max(.2,1-.06*g('kongo'))*(1-(c.red||0))*(1-mf('red')));
+  const king=.10*g('king');
+  const xpMul=(1+.12*g('xp1')+.08*g('chiyu')+king)*soMul(S,'xp')*all*(1+.03*t('exp'))*(1+(c.xp||0))*(1+e('exp'))*(1+mf('xp'))*(1+pb('exp'))*(1+tf('exp'))*ach*stMul(S,'xp');
+  const goldMul=(1+.12*g('gold1')+king)*soMul(S,'gold')*all*(1+.03*t('gld'))*(1+(c.gold||0))*(1+e('gld'))*(1+mf('gold'))*(1+pb('gld'))*(1+tf('gld'))*ach*stMul(S,'xp');
+  const offEff=Math.min(1,.5+.1*g('offline')+.05*o('dream')+tf('off')),offCap=8+2*g('dream')+o('dream')+2*stLv(S,'off');
+  const ult=g('ult'),ultMul=1+.75*ult;
+  const dbl=.06*g('dbl')+mf('dbl'),pierce=Math.min(.9,.12*g('pierce')+(c.pierce||0)+mf('pierce')),dodge=Math.min(.6,.04*g('dodge')+.004*t('dge')+(c.dodge||0)+e('dge')+mf('dodge')+pb('dge')),leech=.02*g('leech')+mf('leech'),guts=Math.min(1,.2*g('guts')+mf('guts'));
+  const slayer=1+.15*g('slayer')+(c.boss||0)+mf('slayer')+tf('boss'),loot=1+.2*g('loot'),dunTime=DUN_TIME+6*g('dtime')+tf('dtime');
+  const speed=1+.1*o('speed')+.05*g('haste')+.1*stLv(S,'speed');
+  /* companions in the party: each hits for a share of the hero's attack on its own clock */
+  const petMul=1+tf('pet'),pets=[];let pdps=0;
+  (S.party||[]).forEach(function(id){const p=PETM[id],pq=S.pets&&S.pets[id];if(!p||!pq)return;const x={id:id,g:p.g,el:p.el,pw:petPw(p,pq)*petMul,iv:petIv(p)};pets.push(x);pdps+=atk*x.pw/x.iv;});
+  const dps=(atk*(1+crit*(critDmg-1))*(1+dbl)/interval+pdps)*speed;
+  const atkEl=(S.eq&&S.eq.w&&S.eq.w.el)||null,defEl=(S.eq&&S.eq.a&&S.eq.a.el)||null;
+  return {atk:atk,hpMax:hpMax,def:def,interval:interval,crit:crit,critDmg:critDmg,regen:regen,thorns:thorns,reduce:reduce,xpMul:xpMul,goldMul:goldMul,offEff:offEff,offCap:offCap,ult:ult,ultMul:ultMul,dbl:dbl,pierce:pierce,dodge:dodge,leech:leech,guts:guts,slayer:slayer,loot:loot,dunTime:dunTime,speed:speed,dps:dps,atkEl:atkEl,defEl:defEl,
+    dropMul:(1+mf('drop'))*(1+pb('drop')),au:mf('au'),tt:mf('tt'),spl:mf('spl'),hl:mf('hl'),rvc:mf('rvc'),stl:mf('stl'),
+    pets:pets,pdps:pdps*speed,petMul:petMul,scout:1+pb('scout'),enh:tf('enh'),eld:tf('eld'),coopB:tf('coop'),achMul:ach,dexMul:dex};
+}
+function enemyFor(stage,boss,k,place){
+  const P=place&&place!=='main'?PLM[place]:null,z=zoneInfo(stage),Z=z.Z,n=stage-1;
+  const list=P||Z,nm=boss?list.b:list.m[(stage+k)%list.m.length];
+  const kk=1+.03*k;
+  let hp=CFG.hpBase*Math.pow(CFG.hpG,n)*kk,atk=CFG.atkBase*Math.pow(CFG.atkG,n)*kk,def=CFG.defBase*Math.pow(CFG.defG,n);
+  let xp=CFG.xpBase*Math.pow(CFG.xpG,n)*kk,gold=CFG.goldBase*Math.pow(CFG.goldG,n)*kk,interval=1.6;
+  if(boss){hp*=CFG.bossHp;atk*=CFG.bossAtk;xp*=CFG.bossRew;gold*=CFG.bossRew;interval=1.4;}
+  if(P){hp*=EL_HP;atk*=EL_ATK;}
+  const pid=(P?P.id:'z'+(z.zi%ZONES.length))+(boss?'b':'m'+((stage+k)%list.m.length));
+  return {name:(!P&&z.loop?'裏':'')+nm[0],glyph:nm[1],boss:!!boss,max:hp,hp:hp,atk:atk,def:def,xp:xp,gold:gold,interval:interval,el:P?P.el:(Z.el||null),pid:pid};
+}
+function dropRoll(S,R,e,st){
+  const P=S.place!=='main'?PLM[S.place]:null,D=P?DROP.el:DROP.main;
+  if(Math.random()>=(e.boss?D.b:D.n)*(st?st.dropMul:1))return null;
+  const slot=P?(Math.random()<.5?'w':'a'):EQK[Math.floor(Math.random()*3)];
+  const it=makeItem(S,slot,rollRar(Math.random,D.w),Math.floor(pSt(S)/10),null,P?P.el:null);
+  const tag=(it.el?'['+ELN[it.el]+'] ':'')+it.nm+'(Lv '+(it.t+1)+'・'+RAR[it.r].n+')';
+  if(S.autoDis&&it.r===0){S.ore+=RAR[0].ore;say(R,tag+'を拾って分解した 鉱石 +'+RAR[0].ore);return it;}
+  const kept=addItem(S,it);
+  say(R,tag+'を拾った'+(kept?'':'(持ち物がいっぱいなので鉱石にした)'));
+  R.ev.push({t:'drop'});
+  return it;
+}
+function say(R,m){R.log.push(m);if(R.log.length>40)R.log.shift();}
+function spawn(S,R,off){
+  if(S.dun){
+    R.enemy=dunEnemy(S);R.ht=0;R.et=0;R.guts=0;
+    if(R.enemy.boss)say(R,S.dun.floor+'階 '+R.enemy.name+'が現れた');
+    return;
+  }
+  const boss=!off&&S.mode==='advance'&&S.kills>=KPS;
+  const k=boss?0:((!off&&S.mode==='advance')?S.kills:Math.floor(Math.random()*KPS));
+  R.enemy=enemyFor(pSt(S),boss,k,S.place);R.ht=0;R.et=0;R.guts=0;
+  if(boss)say(R,R.enemy.name+'が現れた');
+}
+/* levels from l to b: +1 SP each, +2 on multiples of 5 */
+function lvSp(l,b){return (b-l)+Math.floor(b/5)-Math.floor(l/5);}
+function gainXp(S,R,st,xp,off){
+  S.xp+=xp;const l0=S.lvl;
+  /* a big gain jumps most of the way at once (sum of 18*L^1.75 ~ its integral), then finishes level by level */
+  if(S.xp>=xpNeed(S.lvl)*40){
+    const k=18/2.75,a=Math.pow(S.lvl-.5,2.75),b=Math.floor(Math.pow(a+S.xp/k,1/2.75)+.5)-2;
+    if(b>S.lvl){const c=k*(Math.pow(b-.5,2.75)-a);if(c>0&&c<=S.xp){S.xp-=c;S.sp+=lvSp(S.lvl,b);S.lvl=b;}}
+  }
+  let g=0;
+  while(S.xp>=xpNeed(S.lvl)&&g++<5000){S.xp-=xpNeed(S.lvl);S.lvl++;S.sp+=(S.lvl%5===0?2:1);}
+  if(S.lvl>l0){
+    if(!(S.maxLvl>=S.lvl))S.maxLvl=S.lvl;
+    S.hp=Math.min(st.hpMax,S.hp+st.hpMax*.25);
+    if(!off){say(R,'レベルが '+fmt(S.lvl)+' に上がった'+(S.lvl-l0>1?'(+'+fmt(S.lvl-l0)+')':''));R.ev.push({t:'lv'});}
+  }
+}
+function onKill(S,R,st,off){
+  const e=R.enemy,m=(off?st.offEff:1)*(S.dun?st.loot:1);
+  const xp=e.xp*st.xpMul*m,gold=e.gold*st.goldMul*m;
+  S.gold+=gold;S.totalGold+=gold;S.totalKills++;
+  if(e.boss)S.bossKills=(S.bossKills|0)+1;
+  if(R.acc){R.acc.xp+=xp;R.acc.gold+=gold;R.acc.kills++;}
+  petGain(S,(e.boss?5:1)*(off?st.offEff:1));
+  if(S.dun){
+    const d=S.dun,D=DUNM[d.id];let extra='';
+    d.xp+=xp;d.gold+=gold;d.cleared=d.floor;
+    if(e.boss&&D.drop==='sp'){S.sp++;d.sp++;extra=' SP +1';}
+    if(e.boss&&D.drop==='soul'){const s=shrineDrop(d.base+d.floor-1);S.souls+=s;S.totalSouls+=s;d.souls+=s;extra=' 魂 +'+fmt(s);}
+    if(e.boss){const o=D.id==='gold'?4:2;S.ore+=o;d.ore=(d.ore||0)+o;extra+=' 鉱石 +'+o;}
+    mastKill(S,R,e);
+    say(R,d.floor+'階 '+e.name+'を倒した'+extra);
+    if(!off)scoutRoll(S,R,e,st);
+    S.hp=Math.min(st.hpMax,S.hp+st.hpMax*DUN_HEAL);
+    R.enemy=null;R.wait=.35;
+    gainXp(S,R,st,xp,off);
+    d.floor++;
+    if(d.floor>DUN_MAX)endDun(S,R,'clear');
+    return;
+  }
+  if(!off){
+    if(e.boss){
+      pSet(S,pSt(S)+1);S.kills=0;
+      if(S.place==='main'){if(S.stage>S.maxStage)S.maxStage=S.stage;if(S.stage>S.bestStage)S.bestStage=S.stage;if(S.stage>(S.cycBest|0))S.cycBest=S.stage;}
+      else{const q=S.el[S.place];if(q.st>q.mx)q.mx=q.st;if(q.st>q.best)q.best=q.st;}
+      S.ore+=1;S.hp=Math.min(st.hpMax,S.hp+st.hpMax*.3);
+      say(R,e.name+'を倒した '+(S.place==='main'?'ステージ ':PLM[S.place].n+' ')+pLabel(S,pSt(S))+' へ');
+    }else{
+      if(S.mode==='advance'&&S.kills<KPS)S.kills++;
+      say(R,e.name+'を倒した 経験値 +'+fmt(xp));
+    }
+    dropRoll(S,R,e,st);mastKill(S,R,e);scoutRoll(S,R,e,st);
+  }
+  gainXp(S,R,st,xp,off);
+  R.enemy=null;R.wait=.35;
+}
+function dunEnemy(S){
+  const d=S.dun,D=DUNM[d.id],f=d.floor,boss=f%DUN_GUARD===0,n=d.base+f-2;
+  const nm=boss?D.b:D.m[f%D.m.length];
+  let hp=CFG.hpBase*Math.pow(CFG.hpG,n)*D.hp,atk=CFG.atkBase*Math.pow(CFG.atkG,n)*D.atk,def=CFG.defBase*Math.pow(CFG.defG,n);
+  let xp=CFG.xpBase*Math.pow(CFG.xpG,n)*D.xp,gold=CFG.goldBase*Math.pow(CFG.goldG,n)*D.gold;
+  if(boss){hp*=3;atk*=1.3;xp*=3;gold*=3;}
+  return {name:nm[0],glyph:nm[1],boss:boss,max:hp,hp:hp,atk:atk,def:def,xp:xp,gold:gold,interval:D.int||(boss?1.4:1.6),pid:'d'+D.id+(boss?'b':'m'+(f%D.m.length))};
+}
+function startDun(S,R,id){
+  const D=DUNM[id];
+  if(!D||S.dun||!dunOpen(S,D)||S.keys<1)return false;
+  if(S.keys>=keysMax(S))S.keyT=0;
+  S.keys--;
+  S.dun={id:id,floor:1,cleared:0,base:dunBase(S),t:0,xp:0,gold:0,sp:0,souls:0};
+  S.hp=stats(S).hpMax;R.enemy=null;R.wait=.6;R.ht=0;R.et=0;R.dead=0;R.dunRes=null;
+  say(R,D.n+'に入った');
+  return true;
+}
+function endDun(S,R,why){
+  const d=S.dun;if(!d)return;
+  const D=DUNM[d.id],prev=S.dunBest[d.id]||0;
+  if(d.cleared>prev)S.dunBest[d.id]=d.cleared;
+  R.dunRes={id:d.id,name:D.n,cleared:d.cleared,xp:d.xp,gold:d.gold,sp:d.sp,souls:d.souls,ore:d.ore||0,why:why,best:d.cleared>prev};
+  S.dun=null;R.enemy=null;R.wait=.6;R.ht=0;R.et=0;
+  if(why!=='die')S.hp=stats(S).hpMax;
+  say(R,D.n+'から帰還した('+d.cleared+'階まで踏破)');
+}
+/* quick claim: spend up to n keys and work each run out at once, with the same battle as playing it */
+function quickDun(S,R,id,n){
+  const D=DUNM[id];if(!D||S.dun||!dunOpen(S,D)||S.keys<1)return null;
+  n=Math.max(1,Math.min(Math.floor(n)||1,S.keys));
+  const keep=R.log,notes=[],out={id:id,name:D.n,quick:true,runs:[],xp:0,gold:0,sp:0,souls:0,ore:0,best:false,died:0};
+  for(let i=0;i<n&&S.keys>=1;i++){
+    R.log=[];
+    if(!startDun(S,R,id))break;
+    let st=stats(S),lv=S.lvl,g=0;
+    while(S.dun&&g++<50000){if(S.lvl!==lv){lv=S.lvl;st=stats(S);}step(S,R,.1*st.speed,st,false);}
+    if(S.dun)endDun(S,R,'stop');
+    /* keep only the lines worth reading: companions and mastery, not every floor */
+    R.log.forEach(function(m){if(/仲間|絆|また会いに|熟練度/.test(m))notes.push(m);});
+    const r=R.dunRes;
+    if(r){out.runs.push(r.cleared);out.xp+=r.xp;out.gold+=r.gold;out.sp+=r.sp;out.souls+=r.souls;out.ore+=r.ore;if(r.best)out.best=true;if(r.why==='die')out.died++;}
+  }
+  R.log=keep;R.ev.length=0;
+  if(!out.runs.length){R.dunRes=null;return null;}
+  notes.forEach(function(m){say(R,m);});
+  say(R,D.n+'をクイック受け取り(鍵 '+out.runs.length+'本、'+out.runs.map(function(f){return f+'階';}).join('・')+'まで踏破)');
+  R.dunRes=out;
+  return out;
+}
+function regenKeys(S,secs){
+  const mx=keysMax(S),iv=keyInterval(S);
+  if(S.keys>=mx){S.keyT=0;return 0;}
+  S.keyT+=secs;let got=0;
+  while(S.keyT>=iv&&S.keys<mx){S.keyT-=iv;S.keys++;got++;}
+  if(S.keys>=mx)S.keyT=0;
+  return got;
+}
+/* a run that started further in (the 近道 upgrade) has to pass its starting stage before it pays souls */
+function soulGain(S,ms){ms=ms||S.maxStage;if(ms<REB_STAGE||ms<=(S.runStart||1))return 0;return Math.floor((soulCurve(ms)+S.lvl/10)*(1+.1*((S.skills&&S.skills.reso)||0))*stMul(S,'soul')*(1+(ttlFx(S).soul||0)));}
+function shrineDrop(stage){return Math.max(1,Math.round(.06*soulCurve(Math.max(REB_STAGE,stage))));}
+/* what both rebirth and awakening put back to the start */
+function resetRun(S){
+  const s0=startStage(S);
+  S.lvl=1;S.xp=0;S.gold=0;S.sp=1+2*soLv(S,'mem');S.stage=1;S.kills=0;S.maxStage=1;S.mode='advance';S.runStart=1;
+  S.train=trainZero();S.skills={};
+  ELS.forEach(function(k){const q=S.el[k];if(q){q.st=1;q.mx=1;}});
+  if(s0>1){const pl=S.place;S.place='main';S.stage=s0;S.stage=S.maxStage=S.runStart=safeStage(S,stats(S));S.place=pl;}
+  S.hp=stats(S).hpMax;
+}
+function rebirth(S,R){
+  const g=soulGain(S);if(g<1||S.dun)return 0;
+  S.bestStage=Math.max(S.bestStage,S.maxStage);
+  S.souls+=g;S.totalSouls+=g;S.rebirths++;
+  resetRun(S);
+  const log=R.log;Object.assign(R,newRuntime());R.log=log;
+  say(R,S.rebirths+'度目の転生 魂 +'+fmt(g));
+  return g;
+}
+function soulBuy(S,id){
+  const s=SOULM[id],lv=soLv(S,id);
+  if(s.max&&lv>=s.max)return false;
+  const c=soulCost(id,lv);if(S.souls<c)return false;
+  const b=stats(S).hpMax;S.souls-=c;S.soul[id]=lv+1;
+  const a=stats(S).hpMax;if(a>b)S.hp+=a-b;
+  return true;
+}
+function die(S,R,off){
+  S.hp=0;R.dead=2.5;R.enemy=null;
+  if(S.dun){endDun(S,R,'die');return;}
+  if(!off){
+    S.deaths++;pSet(S,Math.max(1,pSt(S)-1));S.kills=0;
+    say(R,'力尽きた… '+pLabel(S,pSt(S))+' まで退却');
+    R.ev.push({t:'die'});
+  }
+}
+function step(S,R,dt,st,off){
+  if(R.dead>0){R.dead-=dt;if(R.dead<=0){S.hp=st.hpMax;R.wait=.3;R.enemy=null;}return;}
+  if(S.dun){S.dun.t=(S.dun.t||0)+dt/st.speed;if(S.dun.t>=st.dunTime){endDun(S,R,'time');return;}}
+  S.hp=Math.min(st.hpMax,S.hp+st.regen*st.hpMax*dt);
+  if(!R.enemy){R.wait-=dt;if(R.wait<=0)spawn(S,R,off);return;}
+  R.ht+=dt;R.et+=dt;
+  let g=0;
+  while(R.enemy&&R.ht>=st.interval&&g++<40){
+    R.ht-=st.interval;R.hits++;
+    const sw=st.dbl>0&&Math.random()<st.dbl?2:1;
+    for(let i=0;i<sw&&R.enemy;i++){
+      const e=R.enemy;
+      let d=st.atk*40/(40+e.def*(1-st.pierce))*elMul(st.atkEl,e.el,st)*(.9+Math.random()*.2);
+      const crit=Math.random()<st.crit;if(crit)d*=st.critDmg;
+      const ult=i===0&&st.ult>0&&R.hits%6===0;if(ult)d*=st.ultMul;
+      if(e.boss)d*=st.slayer;
+      d=Math.max(1,d);e.hp-=d;
+      if(st.leech>0)S.hp=Math.min(st.hpMax,S.hp+d*st.leech);
+      if(!off)R.ev.push({t:'hit',to:'foe',v:d,crit:crit,ult:ult,dbl:i>0});
+      if(e.hp<=0)onKill(S,R,st,off);
+    }
+  }
+  /* companions keep their own clocks while a foe is on the field */
+  const P=st.pets;if(!R.pt)R.pt=[];
+  for(let i=0;i<P.length&&R.enemy;i++){
+    R.pt[i]=(R.pt[i]||0)+dt;g=0;
+    while(R.enemy&&R.pt[i]>=P[i].iv&&g++<20){
+      R.pt[i]-=P[i].iv;
+      const e=R.enemy;
+      let d=st.atk*P[i].pw*40/(40+e.def*(1-st.pierce))*elMul(P[i].el,e.el,st)*(.9+Math.random()*.2);
+      if(e.boss)d*=st.slayer;
+      d=Math.max(1,d);e.hp-=d;
+      if(!off)R.ev.push({t:'pet',i:i,v:d,g:P[i].g});
+      if(e.hp<=0)onKill(S,R,st,off);
+    }
+  }
+  g=0;
+  while(R.enemy&&R.et>=R.enemy.interval&&g++<40){
+    const e=R.enemy;R.et-=e.interval;
+    if(st.dodge>0&&Math.random()<st.dodge){if(!off)R.ev.push({t:'miss'});continue;}
+    let d=e.atk*40/(40+st.def)*st.reduce*elDef(e.el,st.defEl)*(.9+Math.random()*.2);d=Math.max(1,d);
+    const hp0=Math.max(0,S.hp);
+    S.hp-=d;if(!off)R.ev.push({t:'hit',to:'hero',v:d});
+    if(S.hp<=0&&st.guts>0&&!R.guts){R.guts=1;S.hp=st.hpMax*st.guts;if(!off)R.ev.push({t:'guts'});}
+    if(S.hp<=0){die(S,R,off);break;}
+    /* 反撃 returns a share of the HP actually lost, through the foe's defense like any other strike,
+       so a hero with a huge HP pool cannot kill a hard-hitting foe just by being hit */
+    if(st.thorns>0){
+      e.hp-=Math.min(d,hp0)*st.thorns*40/(40+e.def*(1-st.pierce));
+      if(e.hp<=0){onKill(S,R,st,off);continue;}
+    }
+  }
+}
+function safeStage(S,st){
+  for(let s=pSt(S);s>1;s--){
+    const e=enemyFor(s,false,2,S.place),df=40/(40+e.def*(1-st.pierce));
+    const dmg=st.atk*df*elMul(st.atkEl,e.el,st)*(1+st.crit*(st.critDmg-1));
+    let pd=0;st.pets.forEach(function(p){pd+=st.atk*p.pw*df*elMul(p.el,e.el,st)/p.iv;});
+    const ttk=e.hp/(dmg/st.interval+pd);
+    const taken=e.atk*40/(40+st.def)*st.reduce*elDef(e.el,st.defEl)/e.interval*ttk;
+    if(taken<st.hpMax*.5)return s;
+  }
+  return 1;
+}
+function offlineSim(S,R,secs){
+  if(S.dun)endDun(S,R,'stop');
+  const st0=stats(S),cap=st0.offCap*3600,t=Math.min(secs,cap)*st0.speed;
+  const acc={xp:0,gold:0,kills:0},lv0=S.lvl,real=pSt(S);
+  pSet(S,safeStage(S,st0));
+  const used=pSt(S),label=(S.place==='main'?'ステージ ':PLM[S.place].n+' ')+pLabel(S,used),h=t>20000?1:.5;
+  R.acc=acc;R.enemy=null;R.dead=0;R.wait=0;
+  let left=t,st=st0,lv=S.lvl;
+  /* late in the game every kill is a level-up; stats are worked out again only once the level has grown 2%
+     (every level while it is under 100), which makes a long catch-up many times faster */
+  while(left>0){const dt=Math.min(h,left);left-=dt;if(S.lvl!==lv&&(lv<100||S.lvl>=lv*1.02||S.lvl<lv)){lv=S.lvl;st=stats(S);}step(S,R,dt,st,true);}
+  pSet(S,real);
+  R.acc=null;R.enemy=null;R.wait=.2;R.dead=0;R.ev.length=0;
+  S.hp=stats(S).hpMax;
+  const mg=Math.floor(acc.kills*st0.offEff*2.5);mastGain(S,mg);
+  return {secs:secs,used:t,capped:secs>cap,cap:st0.offCap,eff:st0.offEff,speed:st0.speed,xp:acc.xp,gold:acc.gold,kills:acc.kills,lv0:lv0,lv1:S.lvl,stage:used,label:label,mast:mg,pet:S.party.length?Math.floor(acc.kills*st0.offEff):0};
+}
+function canLearn(S,id){
+  const s=SKM[id],lv=skLv(S,id);
+  if(lv>=s.max)return {ok:false,why:'最大レベルです'};
+  const miss=s.p.filter(function(p){return skLv(S,p)<1;});
+  if(miss.length)return {ok:false,why:'先に「'+miss.map(function(p){return SKM[p].n;}).join('」「')+'」を習得'};
+  const c=skillCost(s,lv);
+  if(S.sp<c)return {ok:false,why:'SPが足りません',cost:c};
+  return {ok:true,cost:c};
+}
+function learn(S,id){
+  const r=canLearn(S,id);if(!r.ok)return false;
+  const b=stats(S).hpMax;S.sp-=r.cost;S.skills[id]=skLv(S,id)+1;
+  const a=stats(S).hpMax;if(a>b)S.hp+=a-b;
+  return true;
+}
+function resetSkills(S){
+  let refund=0;for(const s of SK)refund+=skillSpent(s,skLv(S,s.id));
+  S.sp+=refund;S.skills={};S.hp=Math.min(S.hp,stats(S).hpMax);
+}
+/* buys up to lim levels of one training (lim 0 = as many as the gold allows) */
+function trainN(S,k,lim){
+  const t=TR[k];if(!t)return 0;
+  let lv=S.train[k]||0,n=0,g=S.gold;
+  const cap=t.max||Infinity,want=lim>0?lim:Infinity;
+  while(n<want&&lv<cap&&n<10000){const c=trainCost(k,lv,S);if(g<c)break;g-=c;lv++;n++;}
+  if(!n)return 0;
+  const b=stats(S).hpMax;S.gold=g;S.train[k]=lv;
+  const a=stats(S).hpMax;if(a>b)S.hp+=a-b;
+  return n;
+}
+function trainBuy(S,k){return trainN(S,k,1)>0;}
+/* co-op: every client runs the same seeded battle from the same roster, so all see one fight */
+const COOP_TIME=120;
+const COOP=[
+  {n:'スライムの大発生',e:6,el:'water',m:['スライム','液'],b:['キングスライム','冠']},
+  {n:'ゴブリン砦',e:12,el:'fire',m:['ゴブリン','鬼'],b:['ゴブリン将軍','将']},
+  {n:'狼王の森',e:18,el:'grass',m:['森オオカミ','狼'],b:['狼王','牙']},
+  {n:'古木の目覚め',e:25,el:'grass',m:['ツタの怪','蔦'],b:['千年樹','樹']},
+  {n:'骸骨の行進',e:32,el:'fire',m:['ガイコツ','骨'],b:['骸骨王','髑']},
+  {n:'洞窟の竜',e:40,el:'water',m:['コウモリ','翼'],b:['洞窟竜','竜']},
+  {n:'炎帝の玉座',e:48,el:'fire',m:['炎の精','炎'],b:['炎帝','帝']},
+  {n:'溶岩の巨人',e:56,el:'fire',m:['溶岩ゴーレム','岩'],b:['溶岩巨人','巨']},
+  {n:'氷の女王',e:65,el:'water',m:['氷の精','氷'],b:['氷の女王','后']},
+  {n:'雪男の群れ',e:74,el:'water',m:['雪男','雪'],b:['大雪男','嶺']},
+  {n:'魔王城の門番',e:83,el:'grass',m:['暗黒騎士','騎'],b:['門番ゴーレム','門']},
+  {n:'魔王の影',e:92,el:'fire',m:['悪魔','魔'],b:['魔王の影','影']},
+  {n:'天空の神殿',e:102,el:'grass',m:['天使像','像'],b:['神殿の守護者','守']},
+  {n:'雷鳴の巨鳥',e:112,el:'water',m:['雷の精','雷'],b:['サンダーバード','鳥']},
+  {n:'深海の大蛇',e:122,el:'water',m:['半魚人','魚'],b:['リヴァイアサン','蛇']},
+  {n:'冥府の番犬',e:133,el:'fire',m:['亡者','霊'],b:['ケルベロス','犬']},
+  {n:'堕ちた英雄',e:144,el:'grass',m:['影の兵士','兵'],b:['堕ちた英雄','英']},
+  {n:'星喰いの獣',e:156,el:'water',m:['星屑','星'],b:['星喰い','喰']},
+  {n:'時の監視者',e:168,el:'grass',m:['時の欠片','刻'],b:['時の監視者','時']},
+  {n:'原初の魔神',e:180,el:'fire',m:['混沌','混'],b:['原初の魔神','神']},
+  {n:'虚無の回廊',e:192,el:'water',m:['虚無の影','虚'],b:['虚無の王','無']},
+  {n:'竜王の巣',e:204,el:'fire',m:['竜騎兵','騎'],b:['竜王','龍']},
+  {n:'黄昏の都',e:216,el:'grass',m:['黄昏の亡霊','霊'],b:['黄昏の女帝','昏']},
+  {n:'鏡の迷宮',e:228,el:'water',m:['鏡像','鏡'],b:['鏡の魔女','映']},
+  {n:'世界樹の根',e:240,el:'grass',m:['根の番人','根'],b:['世界樹の守護竜','界']},
+  {n:'嵐の王座',e:252,el:'water',m:['嵐の精','嵐'],b:['嵐の王','颶']},
+  {n:'夢幻の城',e:264,el:'grass',m:['夢の欠片','夢'],b:['夢幻の主','幻']},
+  {n:'終焉の門',e:276,el:'fire',m:['終焉の騎士','終'],b:['門の主','焉']},
+  {n:'神々の黄昏',e:288,el:'grass',m:['堕天使','堕'],b:['黄昏の神','暮']},
+  {n:'創世の神',e:300,el:'fire',m:['創世の光','光'],b:['創世の神','創']}
+];
+function rng(seed){let a=seed>>>0;return function(){a=(a+0x6D2B79F5)>>>0;let t=a;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return ((t^(t>>>14))>>>0)/4294967296;};}
+function coopFoe(C,kind,n,idx){
+  const E=C.e,ps=.75+.25*n;
+  let hp=22*Math.pow(CFG.hpG,E-1)*2.2*ps,atk=5*Math.pow(CFG.atkG,E-1)*1.15,def=Math.pow(CFG.defG,E-1),iv=1.7;
+  let nm=C.m;
+  if(kind==='E'){hp*=3;atk*=1.3;nm=[C.m[0]+'のリーダー',C.m[1]];}
+  if(kind==='B'){hp*=12;atk*=1.8;iv*=.9;nm=C.b;}
+  hp=Math.round(hp);
+  return {nm:nm[0],g:nm[1],kind:kind,el:C.el,max:hp,hp:hp,atk:atk,def:def,iv:iv,et:-.3*idx,alive:true};
+}
+function coopWaves(C,n){
+  const mk=function(list){return list.map(function(k,i){return coopFoe(C,k,n,i);});};
+  return [mk(['N','N','N']),mk(['N','N','E']),mk(['B'])];
+}
+function coopSan(p){
+  const n=function(x,lo,hi,d){x=Number(x);return isFinite(x)?Math.min(hi,Math.max(lo,x)):d;};
+  p=p||{};
+  return {p:String(p.p||'').slice(0,40),n:String(p.n||'冒険者').replace(/[\u0000-\u001f\u007f]/g,'').slice(0,12)||'冒険者',c:CLSM[p.c]?p.c:'hero',
+    h:n(p.h,1,1e300,50),a:n(p.a,0,1e300,6),d:n(p.d,0,1e300,1),i:n(p.i,.2,5,1.2),cr:n(p.cr,0,.95,.05),cd:n(p.cd,1,1e4,1.5),rg:n(p.rg,0,.2,.004),
+    pi:n(p.pi,0,.9,0),dg:n(p.dg,0,.6,0),ls:n(p.ls,0,.5,0),sl:n(p.sl,1,10,1),rd:n(p.rd,.1,1,1),db:n(p.db,0,.5,0),ew:ELN[p.ew]?p.ew:null,ea:ELN[p.ea]?p.ea:null,au:n(p.au,0,.5,0),tt:n(p.tt,0,.3,0),spl:n(p.spl,0,1,0),hl:n(p.hl,0,.5,0),rvc:n(p.rvc,0,6,0),stl:n(p.stl,0,.5,0),
+    pp:n(p.pp,0,50,0),pe:ELN[p.pe]?p.pe:null};
+}
+/* pp: the whole party of companions as one strike every 2 seconds, pe: the lead companion's element */
+function coopPw(S){const s=stats(S),r=function(x){return +(+x).toPrecision(4);};let pp=0;s.pets.forEach(function(p){pp+=p.pw/p.iv*2;});return {h:r(s.hpMax),a:r(s.atk),d:r(s.def),i:r(s.interval),cr:r(s.crit),cd:r(s.critDmg),rg:r(s.regen),pi:r(s.pierce),dg:r(s.dodge),ls:r(s.leech),sl:r(s.slayer),rd:r(s.reduce),db:r(s.dbl),ew:s.atkEl,ea:s.defEl,au:r(s.au),tt:r(s.tt),spl:r(s.spl),hl:r(s.hl),rvc:r(s.rvc),stl:r(s.stl),pp:r(pp),pe:s.pets.length?s.pets[0].el:null};}
+function coopInit(run){
+  const C=COOP[run.k];
+  const H=run.r.map(function(p,i){return {i:i,p:p.p,nick:p.n,cls:p.c,max:p.h,hp:p.h,atk:p.a,def:p.d,iv:p.i,cr:p.cr,cd:p.cd,rg:p.rg,pi:p.pi,dg:p.dg,ls:p.ls,sl:p.sl,rd:p.rd,db:p.db,ew:p.ew,ea:p.ea,au:p.au,tt:p.tt,spl:p.spl,hl:p.hl,rvc:p.rvc,stl:p.stl,pp:p.pp||0,pe:p.pe||null,pt:-.5*i,ht:-.2*i,alive:true,rv:6};});
+  const W=coopWaves(C,H.length);
+  return {k:run.k,C:C,R:rng(run.seed),H:H,W:W,w:0,F:W[0],t:0,bt:0,pause:0,done:false,win:false,why:'',ev:[],dmg:H.map(function(){return 0;})};
+}
+function coopTarget(h,F){
+  let tg=null;
+  for(const f of F){if(!f.alive)continue;if(h.cls==='archer'){if(!tg||f.max>tg.max)tg=f;}else{tg=f;break;}}
+  return tg;
+}
+function coopKill(B,f){if(f.alive&&f.hp<=0){f.alive=false;f.hp=0;B.ev.push({t:'kill',f:f});}}
+function coopHit(B,h,f,aura){
+  const R=B.R;
+  let d=h.atk*aura*40/(40+f.def*(1-h.pi))*elAtk(h.ew,f.el)*(.9+.2*R());
+  if(R()<h.cr)d*=h.cd;
+  if(f.kind!=='N')d*=h.sl;
+  d=Math.max(1,Math.floor(d));
+  f.hp-=d;B.dmg[h.i]+=d;
+  if(h.ls>0)h.hp=Math.min(h.max,h.hp+d*h.ls);
+  B.ev.push({t:'hit',f:f,v:d});
+  if(h.cls==='mage'){const sp=Math.floor(d*(.5+(h.spl||0)));for(const o of B.F){if(o!==f&&o.alive){o.hp-=sp;B.dmg[h.i]+=sp;coopKill(B,o);}}}
+  coopKill(B,f);
+}
+function coopVictim(B){
+  const al=B.H.filter(function(x){return x.alive;});if(!al.length)return null;
+  const w=al.find(function(x){return x.cls==='warrior';});
+  if(w&&B.R()<Math.min(.9,.6+(w.tt||0)))return w;
+  return al[Math.floor(B.R()*al.length)];
+}
+function coopHurt(B,h,a,el){
+  if(h.dg>0&&B.R()<h.dg){B.ev.push({t:'miss',h:h.i});return;}
+  const d=Math.max(1,Math.floor(a*40/(40+h.def)*h.rd*elDef(el,h.ea)*(.9+.2*B.R())));
+  h.hp-=d;
+  if(h.hp<=0){h.hp=0;h.alive=false;B.ev.push({t:'down',h:h.i});}
+}
+function coopStep(B,dt){
+  if(B.done)return;
+  B.t+=dt;
+  if(B.t>=COOP_TIME){B.done=true;B.why='time';return;}
+  const H=B.H,R=B.R,C=B.C;
+  if(B.pause>0){
+    B.pause-=dt;
+    if(B.pause<=0){B.w++;B.F=B.W[B.w];B.bt=0;H.forEach(function(h){if(!h.alive){h.alive=true;h.hp=h.max*.3;B.ev.push({t:'rev',h:h.i});}});B.ev.push({t:'wave',w:B.w});}
+    return;
+  }
+  const F=B.F;
+  if(B.w===B.W.length-1)B.bt+=dt;
+  let aura=1;for(const h of H)if(h.alive&&h.cls==='hero')aura=Math.max(aura,1.1+(h.au||0));
+  for(const h of H){
+    if(!h.alive)continue;
+    h.hp=Math.min(h.max,h.hp+h.max*h.rg*dt);
+    if(h.cls==='healer'){
+      h.rv-=dt;
+      if(h.rv<=0){const d=H.find(function(x){return !x.alive;});if(d){d.alive=true;d.hp=d.max*.4;h.rv=Math.max(3,8-(h.rvc||0));B.ev.push({t:'rev',h:d.i,by:h.i});}}
+    }
+    h.ht+=dt;
+    let g=0;
+    while(h.alive&&h.ht>=h.iv&&g++<20){
+      h.ht-=h.iv;
+      if(h.cls==='healer'){
+        let low=null;for(const x of H){if(x.alive&&x.hp<x.max*.7&&(!low||x.hp/x.max<low.hp/low.max))low=x;}
+        if(low){const a=low.max*(.18+(h.hl||0));low.hp=Math.min(low.max,low.hp+a);B.ev.push({t:'heal',h:low.i,v:a});continue;}
+      }
+      const tg=coopTarget(h,F);if(!tg)break;
+      const sw=h.db>0&&R()<h.db?2:1;
+      for(let s=0;s<sw&&tg.alive;s++)coopHit(B,h,tg,aura);
+    }
+    if(h.alive&&h.pp>0){
+      h.pt+=dt;
+      if(h.pt>=2){h.pt-=2;const tg=coopTarget(h,F);if(tg){let d=h.atk*aura*h.pp*40/(40+tg.def*(1-h.pi))*elAtk(h.pe,tg.el)*(.9+.2*R());d=Math.max(1,Math.floor(d));tg.hp-=d;B.dmg[h.i]+=d;coopKill(B,tg);}}
+    }
+  }
+  for(const f of F){
+    if(!f.alive)continue;
+    f.et+=dt;
+    let g=0;
+    while(f.alive&&f.et>=f.iv&&g++<20){
+      f.et-=f.iv;
+      const h=coopVictim(B);if(h)coopHurt(B,h,f.atk,f.el);
+      if(!H.some(function(x){return x.alive;})){B.done=true;B.why='wipe';return;}
+    }
+  }
+  if(!F.some(function(f){return f.alive;})){
+    if(B.w>=B.W.length-1){B.done=true;B.win=true;B.why='clear';}
+    else B.pause=1.2;
+  }
+}
+function coopReward(S,R,k,n,win,thief){
+  const C=COOP[k],st=stats(S),pb=(1+.2*(n-1))*(win?1:.2)*(1+st.coopB);
+  const out={gold:CFG.goldBase*Math.pow(CFG.goldG,C.e-1)*60*st.goldMul*pb*(1+(+thief||0)),xp:CFG.xpBase*Math.pow(CFG.xpG,C.e-1)*60*st.xpMul*pb,ore:win?4+k:1,item:null,kept:false,first:false};
+  if(win&&!(S.coopClr[k]>0)){out.first=true;out.ore+=15;}
+  S.gold+=out.gold;S.totalGold+=out.gold;S.ore+=out.ore;
+  gainXp(S,R,st,out.xp,!R);
+  out.mast=win?50+10*k:10;mastGain(S,out.mast);
+  if(win){
+    S.coopClr[k]=(S.coopClr[k]||0)+1;if(k+1>S.coopMax)S.coopMax=Math.min(COOP.length-1,k+1);
+    if(out.first||Math.random()<.4){
+      let r=rollRar(Math.random,[45,35,15,5]);if(out.first&&r<1)r=1;
+      out.item=makeItem(S,EQK[Math.floor(Math.random()*3)],r,Math.max(eqTier(S),Math.floor(C.e/10)),null,C.el);
+      out.kept=addItem(S,out.item);
+    }
+    if(n>(S.coopBig|0))S.coopBig=n;
+    /* the stage boss joins on the first clear, and sometimes after */
+    if(out.first||Math.random()<.15*st.scout){out.pet='c'+k;out.petR=petJoin(S,R,out.pet);}
+  }
+  return out;
+}
+
+/* numbers for messages and the screen: 1.23万, 4.5億 ... */
+function fmt(n){
+  n=Math.floor(n);
+  if(n<10000)return n.toLocaleString('ja-JP');
+  if(n>=1e24)return n.toExponential(2).replace('e+','e');
+  const U=[['垓',1e20],['京',1e16],['兆',1e12],['億',1e8],['万',1e4]];
+  for(const u of U){if(n>=u[1]){const x=n/u[1];return (x>=100?x.toFixed(0):(x>=10?x.toFixed(1):x.toFixed(2)))+u[0];}}
+  return String(n);
+}
+
+/* ---------- companions: monsters met in the field sometimes join, and the party fights beside the hero ---------- */
+const PET_LV=100,PET_BOND=5,PET_RK=['★','★★','★★★'];
+const PFX={atk:['攻撃力','%',[5,8,12]],hp:['最大体力','%',[6,10,15]],def:['防御力','%',[6,10,15]],crt:['会心率','%',[1,2,3]],cdm:['会心ダメージ','%',[10,15,25]],gld:['獲得ゴールド','%',[6,10,15]],exp:['獲得経験値','%',[6,10,15]],reg:['自然回復','%/秒',[.2,.3,.5]],spd:['攻撃速度','%',[3,5,8]],dge:['回避率','%',[1,1.5,2.5]],drop:['装備のドロップ率','%',[5,10,15]],scout:['仲間になる確率','%',[10,15,25]]};
+/* per group: [element, blessing] for the three monsters and then the boss; 0 = the place's own element */
+const PET_SRC={
+  z0:[['water','reg'],[null,'gld'],['grass','spd'],['grass','hp']],
+  z1:[[null,'atk'],['grass','crt'],['grass','def'],['grass','exp']],
+  z2:[[null,'dge'],[null,'cdm'],[null,'def'],['fire','atk']],
+  z3:[['fire','atk'],['fire','spd'],['fire','hp'],['fire','cdm']],
+  z4:[['water','crt'],['water','dge'],['water','hp'],['water','def']],
+  z5:[[null,'def'],['fire','cdm'],[null,'crt'],[null,'atk']],
+  fire:[[0,'atk'],[0,'reg'],[0,'def'],[0,'cdm']],
+  water:[[0,'reg'],[0,'spd'],[0,'def'],[0,'hp']],
+  grass:[[0,'exp'],[0,'reg'],[0,'crt'],[0,'hp']],
+  gold:[[0,'gld'],[0,'drop'],[0,'def'],[0,'gld']],
+  xp:[[0,'exp'],[0,'atk'],[0,'dge'],[0,'exp']],
+  sp:[[0,'cdm'],[0,'crt'],[0,'scout'],[0,'exp']],
+  soul:[[0,'dge'],[0,'atk'],[0,'def'],[0,'hp']]
+};
+const COOP_FX=['scout','gld','atk','hp','crt','def','cdm','hp','def','spd','def','atk','hp','spd','reg','cdm','atk','crt','spd','atk','dge','atk','gld','crt','exp','spd','exp','cdm','hp','atk'];
+const PETS=[],PETM={};
+function petDef(id,nm,rk,el,fx,src,w){const p={id:id,n:nm[0],g:nm[1],rk:rk,el:el||null,fx:fx,src:src,w:w};PETS.push(p);PETM[id]=p;}
+ZONES.forEach(function(Z,i){const t=PET_SRC['z'+i];Z.m.forEach(function(m,j){petDef('z'+i+'m'+j,m,1,t[j][0],t[j][1],'main',Z.n);});petDef('z'+i+'b',Z.b,2,t[3][0],t[3][1],'main',Z.n+'のボス');});
+PLACES.forEach(function(P){if(!P.el)return;const t=PET_SRC[P.id];P.m.forEach(function(m,j){petDef(P.id+'m'+j,m,1,P.el,t[j][1],'place',P.n);});petDef(P.id+'b',P.b,2,P.el,t[3][1],'place',P.n+'のボス');});
+DUN.forEach(function(D){const t=PET_SRC[D.id];D.m.forEach(function(m,j){petDef('d'+D.id+'m'+j,m,1,null,t[j][1],'dun',D.n);});petDef('d'+D.id+'b',D.b,2,null,t[3][1],'dun',D.n+'の番人');});
+COOP.forEach(function(C,k){petDef('c'+k,C.b,3,C.el,COOP_FX[k],'coop','協力 '+(k+1)+'. '+C.n);});
+/* chance per kill: [normal, boss or guardian] */
+const SCOUT={main:[.0015,.02],place:[.003,.04],dun:[.003,.04]};
+function petNeed(L){return Math.floor(5*Math.pow(L,1.4));}
+function petPw(p,o){return [.2,.3,.4][p.rk-1]*(1+.02*(o.lv-1))*(1+.15*(o.b-1));}
+function petIv(p){return [2,1.8,1.6][p.rk-1];}
+function petFxVal(p,o){return PFX[p.fx][2][p.rk-1]*(1+.25*((o?o.b:1)-1));}
+function partyMax(S){const b=Math.max(S.bestStage,S.maxStage);return 1+(b>=21?1:0)+(b>=51?1:0)+stLv(S,'slot');}
+function dexN(S){return S.pets?Object.keys(S.pets).length:0;}
+function petBonus(S){const o={};(S.party||[]).forEach(function(id){const p=PETM[id],q=S.pets&&S.pets[id];if(p&&q)o[p.fx]=(o[p.fx]||0)+petFxVal(p,q)/100;});return o;}
+function petXp1(o,x){if(o.lv>=PET_LV||!(x>0))return 0;o.xp+=x;let g=0,up=0;while(o.lv<PET_LV&&o.xp>=petNeed(o.lv)&&g++<500){o.xp-=petNeed(o.lv);o.lv++;up++;}if(o.lv>=PET_LV)o.xp=0;return up;}
+function petGain(S,x){if(!(x>0)||!S.party)return;S.party.forEach(function(id){const o=S.pets[id];if(o)petXp1(o,x);});}
+function petJoin(S,R,id){
+  const p=PETM[id];if(!p)return '';
+  const o=S.pets[id];
+  if(!o){S.pets[id]={lv:1,xp:0,b:1};if(S.party.length<partyMax(S))S.party.push(id);S.petNew=(S.petNew|0)+1;if(R){say(R,p.n+'が仲間になった');R.ev.push({t:'join',id:id});}return 'new';}
+  if(o.b<PET_BOND){o.b++;S.petNew=(S.petNew|0)+1;if(R)say(R,p.n+'との絆が深まった(絆 '+o.b+')');return 'bond';}
+  petXp1(o,petNeed(o.lv));if(R)say(R,p.n+'がまた会いに来た(Lv '+o.lv+')');return 'xp';
+}
+function scoutRoll(S,R,e,st){
+  if(!e.pid||!PETM[e.pid])return '';
+  const src=S.dun?'dun':(S.place==='main'?'main':'place');
+  return Math.random()<SCOUT[src][e.boss?1:0]*st.scout?petJoin(S,R,e.pid):'';
+}
+function partyToggle(S,id){
+  if(!S.pets[id])return false;
+  const i=S.party.indexOf(id);
+  if(i>=0){S.party.splice(i,1);return true;}
+  if(S.party.length>=partyMax(S))return false;
+  S.party.push(id);return true;
+}
+
+/* ---------- achievements: every tier reached adds 2% to attack, HP, defense, XP and gold for good ---------- */
+const ACH_PER=.02,DEX_PER=.01;
+const ACH=[
+  {id:'kill',n:'敵を倒す',u:'体',t:[100,1000,1e4,1e5,1e6],f:function(S){return S.totalKills;}},
+  {id:'boss',n:'ボスと番人を倒す',u:'体',t:[10,100,1000,1e4],f:function(S){return S.bossKills||0;}},
+  {id:'stage',n:'ステージを進む',st:1,t:[11,21,31,51,61,101,151,201,251,301],f:function(S){return Math.max(S.bestStage,S.maxStage);}},
+  {id:'lvl',n:'レベルを上げる',pre:'Lv ',t:[10,50,100,1000,1e4,1e6,1e8],f:function(S){return Math.max(S.maxLvl||1,S.lvl);}},
+  {id:'gold',n:'ゴールドを稼ぐ',t:[1e4,1e6,1e8,1e12,1e16,1e20],f:function(S){return S.totalGold;}},
+  {id:'reb',n:'転生する',u:'回',t:[1,5,10,25,50,100],f:function(S){return S.rebirths;}},
+  {id:'soul',n:'魂を集める',t:[100,1e4,1e6,1e9,1e12,1e15],f:function(S){return S.totalSouls;}},
+  {id:'dun',n:'ダンジョンを踏破する(最高階の合計)',u:'階',t:[20,50,100,200,300,396],f:function(S){let t=0;for(const k in S.dunBest)t+=+S.dunBest[k]||0;return t;}},
+  {id:'elm',n:'属性ダンジョンを進む(最高Lvの合計)',pre:'Lv ',t:[30,100,300,600,1000],f:function(S){let t=0;ELS.forEach(function(k){t+=S.el[k].best;});return t;}},
+  {id:'coop',n:'協力ステージをクリアする',u:'ステージ',t:[1,5,10,20,30],f:function(S){return Object.keys(S.coopClr).length;}},
+  {id:'party',n:'大人数でクリアする',u:'人',t:[2,3,4],f:function(S){return S.coopBig|0;}},
+  {id:'mast',n:'熟練度を上げる(全職業の合計)',pre:'Lv ',t:[30,60,120,240,360],f:function(S){let t=0;CLS.forEach(function(c){t+=mastOf(S,c.id).lv;});return t;}},
+  {id:'enh',n:'装備を強化する',pre:'+',t:[3,5,10,13,15],f:function(S){return S.enhMax|0;}},
+  {id:'leg',n:'レジェンド装備を手に入れる',u:'個',t:[1,5,20],f:function(S){return S.legend|0;}},
+  {id:'pet',n:'仲間を集める',u:'種',t:[1,10,25,50,PETS.length],f:dexN},
+  {id:'bond',n:'絆を深める(絆の合計)',t:[20,50,100,200,PETS.length*PET_BOND],f:function(S){let t=0;for(const k in S.pets)t+=S.pets[k].b;return t;}},
+  {id:'awk',n:'覚醒する',u:'回',t:[1,3,10,25],f:function(S){return S.awk|0;}},
+  {id:'die',n:'倒される',u:'回',t:[1,10,100],f:function(S){return S.deaths;}},
+  {id:'time',n:'冒険を続ける',u:'時間',t:[1,10,50,100,500],f:function(S){return S.playMs/3.6e6;}}
+];
+const ACHM={};ACH.forEach(function(a){ACHM[a.id]=a;});
+const ACH_ALL=ACH.reduce(function(n,a){return n+a.t.length;},0);
+function achTier(a,v){let t=0;while(t<a.t.length&&v>=a.t[t])t++;return t;}
+function achPts(S){let n=0;if(S.ach)for(const k in S.ach)n+=S.ach[k]|0;return n;}
+function achCheck(S,R){
+  const out=[];
+  ACH.forEach(function(a){const t=achTier(a,a.f(S)),had=S.ach[a.id]|0;if(t>had){S.ach[a.id]=t;out.push([a,t]);}});
+  if(out.length){S.achNew=(S.achNew|0)+out.length;if(R)out.forEach(function(x){say(R,'実績「'+x[0].n+'」★'+x[1]+' を達成');});}
+  return out;
+}
+/* titles: one at a time, shown beside the hero and to the party */
+const TTL=[
+  {id:'grass',n:'草原を越えし者',a:['stage',1],fx:{exp:.05}},
+  {id:'maou',n:'魔王を討つ者',a:['stage',5],fx:{boss:.1}},
+  {id:'brave',n:'百戦錬磨',a:['kill',3],fx:{atk:.05}},
+  {id:'ikki',n:'一騎当千',a:['kill',5],fx:{atk:.12}},
+  {id:'reb',n:'転生者',a:['reb',1],fx:{soul:.05}},
+  {id:'rinne',n:'輪廻の旅人',a:['reb',4],fx:{soul:.15}},
+  {id:'awk',n:'覚醒者',a:['awk',1],fx:{star:.1}},
+  {id:'gold',n:'黄金の手',a:['gold',4],fx:{gld:.1}},
+  {id:'dun',n:'迷宮の覇者',a:['dun',4],fx:{dtime:10}},
+  {id:'elm',n:'属性使い',a:['elm',3],fx:{eld:.1}},
+  {id:'tamer',n:'魔物使い',a:['pet',2],fx:{pet:.1}},
+  {id:'mking',n:'魔物の王',a:['pet',4],fx:{pet:.25}},
+  {id:'smith',n:'鍛冶の匠',a:['enh',3],fx:{enh:.05}},
+  {id:'lsmith',n:'伝説の鍛冶師',a:['enh',5],fx:{enh:.1}},
+  {id:'ally',n:'頼れる仲間',a:['coop',2],fx:{coop:.1}},
+  {id:'four',n:'四人の絆',a:['party',3],fx:{coop:.2}},
+  {id:'master',n:'百職の達人',a:['mast',4],fx:{mast:.2}},
+  {id:'fall',n:'七転び八起き',a:['die',3],fx:{hp:.1}},
+  {id:'nosleep',n:'不眠不休',a:['time',3],fx:{off:.05}},
+  {id:'genesis',n:'創世を見た者',a:['coop',5],fx:{atk:.05,hp:.05,def:.05,exp:.05,gld:.05}}
+];
+const TTLM={};TTL.forEach(function(T){TTLM[T.id]=T;});
+const TFX={atk:['攻撃力','%',100],hp:['最大体力','%',100],def:['防御力','%',100],exp:['獲得経験値','%',100],gld:['獲得ゴールド','%',100],boss:['ボス・番人への与ダメージ','%',100],soul:['転生で得る魂','%',100],star:['覚醒で得る星','%',100],dtime:['ダンジョンの制限時間','秒',1],eld:['有利な属性で与えるダメージ','%',100],pet:['仲間の攻撃','%',100],enh:['強化の成功率','%',100],coop:['協力ステージの報酬','%',100],mast:['熟練度の上がり方','%',100],off:['放置効率','%',100]};
+function ttlOpen(S,T){return ((S.ach&&S.ach[T.a[0]])|0)>=T.a[1];}
+function ttlFx(S){const T=TTLM[S.title];return T&&ttlOpen(S,T)?T.fx:{};}
+
+/* ---------- awakening: a second prestige that also resets souls, paid in stars ---------- */
+const AWK_STAGE=191;
+/* tuned with the bot: about +2.5 zones of best stage per 6 hours after the first awakening, with no runaway */
+const STAR=[
+  {id:'atk',n:'星の刃',u:'攻撃力',mul:1.3,base:1,gr:1.6},
+  {id:'def',n:'星の守り',u:'最大体力と防御力',mul:1.3,base:1,gr:1.6},
+  {id:'xp',n:'星の導き',u:'獲得経験値とゴールド',mul:1.3,base:1,gr:1.6},
+  {id:'soul',n:'星の輪廻',u:'転生で得る魂',mul:1.6,base:2,gr:1.8},
+  {id:'auto',n:'自動鍛錬',e:'鍛錬を安いものから自動で強化する(育成 → 鍛錬で切り替え)',base:3,gr:1,max:1},
+  {id:'reb',n:'自動転生',e:'決めたステージに着くと自動で転生する(この下で設定)',base:8,gr:1,max:1},
+  {id:'start',n:'近道',e:'転生後、10ステージ先から始める(勝てる範囲で、通算の最高の半分まで)',base:4,gr:2,max:10},
+  {id:'slot',n:'仲間の枠',e:'連れていける仲間 +1',base:15,gr:1,max:1},
+  {id:'speed',n:'星の砂時計',e:'ゲーム速度 +10%',base:5,gr:1.8,max:10},
+  {id:'key',n:'星の鍵',e:'ダンジョンの鍵の最大数 +1',base:6,gr:2,max:3},
+  {id:'off',n:'星の夢',e:'放置の上限 +2時間',base:4,gr:1.8,max:6}
+];
+const STARM={};STAR.forEach(function(s){STARM[s.id]=s;});
+function stLv(S,id){return (S.star&&S.star[id])||0;}
+function stMul(S,id){const s=STARM[id];return s&&s.mul?Math.pow(s.mul,stLv(S,id)):1;}
+function starCost(id,lv){const s=STARM[id];return Math.ceil(s.base*Math.pow(s.gr,lv));}
+function starGain(S,b){b=b||S.cycBest||1;if(b<AWK_STAGE)return 0;return Math.floor(10*Math.pow(1.05,b-AWK_STAGE)*(1+(ttlFx(S).star||0)));}
+function starBuy(S,id){
+  const s=STARM[id];if(!s)return false;
+  const lv=stLv(S,id);if(s.max&&lv>=s.max)return false;
+  const c=starCost(id,lv);if(S.stars<c)return false;
+  const b=stats(S).hpMax;S.stars-=c;S.star[id]=lv+1;
+  const a=stats(S).hpMax;if(a>b)S.hp+=a-b;
+  return true;
+}
+function startStage(S){const lv=stLv(S,'start');if(!lv)return 1;return Math.max(1,Math.min(1+10*lv,1+10*Math.floor(Math.max(S.bestStage,S.maxStage)/20)));}
+const SOUL_KEEP=['speed','mem','dream','key'];
+function awaken(S,R){
+  const g=starGain(S);if(g<1||S.dun)return 0;
+  S.bestStage=Math.max(S.bestStage,S.maxStage);
+  S.stars+=g;S.totalStars+=g;S.awk++;
+  S.souls=0;const keep={};SOUL_KEEP.forEach(function(k){if(S.soul[k])keep[k]=S.soul[k];});S.soul=keep;
+  S.cycBest=1;
+  resetRun(S);
+  const log=R.log;Object.assign(R,newRuntime());R.log=log;
+  say(R,S.awk+'度目の覚醒 星 +'+fmt(g));
+  return g;
+}
+/* automation, run once a second by the screen loop */
+function autoTrain(S){
+  if(stLv(S,'auto')<1||!S.autoTr)return 0;
+  let n=0,b=0;
+  for(let g=0;g<3000;g++){
+    let best=null,bc=Infinity;
+    for(const k of TRK){const t=TR[k],lv=S.train[k]||0;if(t.max&&lv>=t.max)continue;const c=trainCost(k,lv,S);if(c<bc){bc=c;best=k;}}
+    if(!best||S.gold<bc)break;
+    if(!n)b=stats(S).hpMax;
+    S.gold-=bc;S.train[best]=(S.train[best]||0)+1;n++;
+  }
+  if(n){const a=stats(S).hpMax;if(a>b)S.hp+=a-b;}
+  return n;
+}
+const SK_ROW=SK.slice().sort(function(a,b){return a.r-b.r||a.c-b.c;});
+/* skill auto-learning: a target level per skill (no plan = every skill to its max); a wanted skill pulls its
+   prerequisites up to at least Lv 1; spare SP goes to 勇者の証 once every target is met */
+function skTarget(S,s){return s.grow?0:(S.skPlan?Math.min(s.max,S.skPlan[s.id]|0):s.max);}
+function skNeed(S){
+  const need={};
+  SK.forEach(function(s){need[s.id]=skTarget(S,s);});
+  if(S.skProof!==false)need.proof=1;
+  let ch=true;
+  while(ch){ch=false;SK.forEach(function(s){if((need[s.id]|0)>0)s.p.forEach(function(q){if(!((need[q]|0)>=1)){need[q]=1;ch=true;}});});}
+  need.proof=0;
+  return need;
+}
+function skLeft(S,need){need=need||skNeed(S);let sp=0;SK.forEach(function(s){if(s.grow)return;for(let l=skLv(S,s.id);l<(need[s.id]|0);l++)sp+=skillCost(s,l);});return sp;}
+function autoSkill(S){
+  if(!S.skAuto)return 0;
+  const need=skNeed(S);let n=0,b=0;
+  /* cheapest learnable first, so the top rows fill before the deep ones */
+  for(let g=0;g<1000;g++){
+    let best=null,bc=Infinity;
+    for(const s of SK_ROW){if(s.grow||skLv(S,s.id)>=(need[s.id]|0))continue;const r=canLearn(S,s.id);if(r.ok&&r.cost<bc){bc=r.cost;best=s;}}
+    if(!best)break;
+    if(!n)b=stats(S).hpMax;
+    S.sp-=bc;S.skills[best.id]=skLv(S,best.id)+1;n++;
+  }
+  if(S.skProof!==false&&skLeft(S,need)===0){
+    for(let g=0;g<3000;g++){const r=canLearn(S,'proof');if(!r.ok)break;if(!n)b=stats(S).hpMax;S.sp-=r.cost;S.skills.proof=skLv(S,'proof')+1;n++;}
+  }
+  if(n){const a=stats(S).hpMax;if(a>b)S.hp+=a-b;}
+  return n;
+}
+function autoRebirth(S,R){
+  if(stLv(S,'reb')<1||!(S.autoReb>1)||S.dun)return 0;
+  if(S.maxStage>=S.autoReb&&soulGain(S)>=1)return rebirth(S,R);
+  return 0;
+}
+// ==/ENGINE==
+
+/* ---------- UI ---------- */
+const KEY='idle-hero-v1';
+const $=function(id){return document.getElementById(id);};
+function num(x){return (Math.round(x*10)/10).toString();}
+function fmtMul(x){return x<100?x.toFixed(2):fmt(x);}
+function signed(x){return (x>=0?'+':'')+num(x);}
+function fmtTime(sec){
+  sec=Math.floor(sec);const h=Math.floor(sec/3600),m=Math.floor(sec%3600/60),s=sec%60;
+  if(h>0)return h+'時間'+m+'分';
+  if(m>0)return m+'分'+s+'秒';
+  return s+'秒';
+}
+function valItem(it){
+  if(!it||typeof it!=='object'||!EQS[it.s]||!(it.r>=0&&it.r<RAR.length))return null;
+  const pr=function(a){return Array.isArray(a)?a.filter(function(p){return Array.isArray(p)&&EST[p[0]]&&isFinite(p[1]);}).map(function(p){return [p[0],+p[1]];}):[];};
+  const m=pr(it.m);if(!m.length)return null;
+  const cl=function(v,hi){v=Math.floor(+v);return v>0?Math.min(hi,v):0;};
+  /* older saves named gear past the ninth tier 神剣+3; that is now 神剣・改三 */
+  const nm=String(it.nm||EQS[it.s].n).slice(0,30).replace(/\+(\d+)$/,function(_,k){return '・改'+(+k>1?kanjiNum(+k):'');});
+  return {id:+it.id||0,s:it.s,r:it.r|0,t:Math.max(0,+it.t||0),nm:nm,m:m,x:pr(it.x).slice(0,4),el:ELN[it.el]&&it.s!=='r'?it.el:null,p:cl(it.p,ENH_MAX),f:cl(it.f,50),os:Math.max(0,+it.os||0)};
+}
+function merge(o){
+  const d=defaultState(),s=Object.assign(defaultState(),o);
+  s.train=Object.assign(trainZero(),o.train||{});
+  TRK.forEach(function(k){if(typeof s.train[k]!=='number'||!isFinite(s.train[k]))s.train[k]=0;});
+  s.skills=Object.assign({},o.skills||{});
+  s.soul=Object.assign({},o.soul||{});
+  s.dunBest=Object.assign({},o.dunBest||{});
+  s.coopClr=Object.assign({},o.coopClr||{});
+  for(const k of ['lvl','xp','gold','sp','stage','kills','maxStage','hp','souls','totalSouls','rebirths','bestStage','keys','keyT','totalKills','totalGold','deaths','playMs','savedAt','ore','itemSeq','coopMax',
+    'petNew','bossKills','maxLvl','achNew','coopBig','enhMax','legend','stars','totalStars','awk','cycBest','autoReb','buyN','runStart']){if(typeof s[k]!=='number'||!isFinite(s[k]))s[k]=d[k];}
+  if(s.mode!=='farm')s.mode='advance';
+  if(!CLSM[s.cls])s.cls='hero';
+  s.nick=typeof s.nick==='string'?s.nick.replace(/[\u0000-\u001f\u007f]/g,'').slice(0,12):'';
+  const eq={w:null,a:null,r:null};
+  if(o.eq&&typeof o.eq==='object')EQK.forEach(function(k){const it=valItem(o.eq[k]);if(it&&it.s===k)eq[k]=it;});
+  s.eq=eq;
+  s.inv=Array.isArray(o.inv)?o.inv.map(valItem).filter(Boolean).slice(0,INV_MAX):[];
+  let mx=s.itemSeq||0;s.inv.concat(EQK.map(function(k){return eq[k];}).filter(Boolean)).forEach(function(it){if(it.id>mx)mx=it.id;});s.itemSeq=mx;
+  s.coopMax=Math.max(0,Math.min(COOP.length-1,s.coopMax|0));
+  if(!PLM[s.place])s.place='main';
+  const el=elZero();
+  if(o.el&&typeof o.el==='object')ELS.forEach(function(k){const q=o.el[k];if(q&&typeof q==='object'){['st','mx','best'].forEach(function(f){const v=+q[f];if(isFinite(v)&&v>=1)el[k][f]=Math.floor(v);});el[k].mx=Math.max(el[k].mx,el[k].st);el[k].best=Math.max(el[k].best,el[k].mx);}});
+  s.el=el;s.autoDis=!!s.autoDis;
+  const ms=mastZero();
+  if(o.mast&&typeof o.mast==='object')CLS.forEach(function(c){const q=o.mast[c.id];if(!q||typeof q!=='object')return;const lv=Math.floor(+q.lv);if(lv>=1)ms[c.id].lv=Math.min(MAST_MAX,lv);const xp=+q.xp;if(isFinite(xp)&&xp>=0)ms[c.id].xp=xp;if(q.n&&typeof q.n==='object')MT[c.id].forEach(function(d){const v=Math.floor(+q.n[d.id]);if(v>0)ms[c.id].n[d.id]=Math.min(d.max,v);});});
+  s.mast=ms;
+  const pets={};
+  if(o.pets&&typeof o.pets==='object')Object.keys(o.pets).forEach(function(id){const q=o.pets[id];if(!PETM[id]||!q||typeof q!=='object')return;const lv=Math.floor(+q.lv),b=Math.floor(+q.b),xp=+q.xp;pets[id]={lv:lv>=1?Math.min(PET_LV,lv):1,b:b>=1?Math.min(PET_BOND,b):1,xp:isFinite(xp)&&xp>=0?xp:0};});
+  s.pets=pets;
+  const star={};if(o.star&&typeof o.star==='object')STAR.forEach(function(x){const v=Math.floor(+o.star[x.id]);if(v>0)star[x.id]=x.max?Math.min(x.max,v):v;});
+  s.star=star;
+  const party=[];if(Array.isArray(o.party))o.party.forEach(function(id){if(typeof id==='string'&&pets[id]&&party.indexOf(id)<0)party.push(id);});
+  s.party=party.slice(0,partyMax(s));
+  const ach={};if(o.ach&&typeof o.ach==='object')ACH.forEach(function(a){const v=Math.floor(+o.ach[a.id]);if(v>0)ach[a.id]=Math.min(a.t.length,v);});
+  s.ach=ach;
+  s.title=typeof o.title==='string'&&TTLM[o.title]?o.title:'';
+  /* skill auto-learning: a plan of target levels, or null for every skill to its max */
+  const planOf=function(src){const p={};SK.forEach(function(x){if(x.grow)return;const v=Math.floor(+src[x.id]);p[x.id]=v>0?Math.min(x.max,v):0;});return p;};
+  s.skPlan=o.skPlan&&typeof o.skPlan==='object'?planOf(o.skPlan):null;
+  s.skAuto=!!s.skAuto;s.skProof=s.skProof!==false;
+  /* saves from the version where this was the star upgrade スキルの記憶: keep the remembered build as the plan, refund the stars */
+  if(o.star&&+o.star.mem>0){
+    s.stars+=3;s.memRefund=3;
+    if(o.skMem&&typeof o.skMem==='object'&&Object.keys(o.skMem).length){if(!s.skPlan)s.skPlan=planOf(o.skMem);s.skProof=+o.skMem.proof>0;}
+    if(o.memOn!==false)s.skAuto=true;
+  }
+  delete s.skMem;delete s.memOn;delete s.memRun;
+  s.autoTr=!!s.autoTr;s.qkAll=!!s.qkAll;
+  /* saves from before awakening existed: their best so far counts toward the first one */
+  if(typeof o.cycBest!=='number'||!(o.cycBest>=1))s.cycBest=Math.max(s.bestStage,s.maxStage);
+  s.maxLvl=Math.max(s.maxLvl||1,s.lvl);
+  if([0,1,10].indexOf(s.buyN)<0)s.buyN=1;
+  s.stars=Math.max(0,s.stars);s.awk=Math.max(0,Math.floor(s.awk));s.petNew=Math.max(0,s.petNew|0);s.achNew=Math.max(0,s.achNew|0);
+  if(!s.dun||typeof s.dun!=='object'||!DUNM[s.dun.id])s.dun=null;
+  s.bestStage=Math.max(s.bestStage,s.maxStage);s.v=VER;
+  return s;
+}
+function loadSave(){
+  try{const j=localStorage.getItem(KEY);if(j){const o=JSON.parse(j);if(o&&typeof o.lvl==='number')return merge(o);}}catch(e){}
+  return null;
+}
+let S,R,st,sel=null,loaded=false;
+function save(){try{S.savedAt=Date.now();localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}}
+
+const E={};
+['gold','spTop','spChip','report','repTxt','repClose','zoneName','stageNo','modeNote','modeAdv','modeFarm','pips','heroUnit','foeUnit','foeSprite','foeGlyph','foeName','foeFill','foeTxt','hpFill','hpTxt','lvU','lv','xpTxt','xpFill','sAtk','sDef','sInt','sCrit','sReg','sDps','log','trainList','spBig','tree','detail','skReset','rec','offInfo','saveCopy','saveBox','saveLoad','saveMsg','hardReset','bdTrain','bdSkill','soulChip','soulTop','dunRes','drTitle','drTxt','drClose','drAgain','stgLbl','modeSeg','retreat','dunBar','keyPips','keyNext','dunLvl','dunList','soulBig','rebCount','rebBody','rebBtn','soulList','bdDun','bdReb','sCritD','sDodge','sSpd','recBtn','coopBanner','heroG','heroN','subSeg','eqSlots','oreN','craftCost','craftBtns','craftMsg','invN','dismAll','invList','clsList','cfBox','cfName','cfInfo','cfFoes','cfParty','cfLog','cfRes','cfResT','cfResTxt','cfResClose','ptBox','netMsg','nickIn','coopList','bdCoop','placeSeg','stageNav','navInfo','elInfo','dropBtn','statBtn','dropBox','fullStats','craftLv','autoDis','mastSeg','mastName','mastLv','mastPts','mastFill','mastNote','mastTree','mastDetail','mastReset',
+ 'petRow','bdPet','ptyNote','ptySlots','petN','petList','dexN','dexNote','dexGrid','dexDetail','smith',
+ 'logSeg','bdAch','bdRec','achBig','achNote','achList','ttlList','heroT',
+ 'starChip','starTop','starBig','awkCount','awkBody','awkBtn','starSec','starList','autoBox','arebBox','optReb','autoNote','skAutoSeg','skAutoTxt','skProofChk','skPlanSave','skPlanMax','buySeg','autoTrBox','optAutoTr','qkSeg'].forEach(function(id){E[id]=$(id);});
+
+/* DOM writes happen only when a value really changes; setting hidden, disabled or aria-pressed to the value it already has still makes the browser restyle.
+   Text is changed inside the existing text node, so nothing is removed from or added to the page */
+function tx(el,v){v=String(v);if(el._v!==v){el._v=v;const f=el.firstChild;if(f&&f.nodeType===3&&!f.nextSibling&&v)f.data=v;else el.textContent=v;}}
+function wd(el,p){const v=(Math.max(0,Math.min(100,p))-100).toFixed(1);if(el._w!==v){el._w=v;el.style.transform='translateX('+v+'%)';}}
+function hd(el,v){v=!!v;if(el.hidden!==v)el.hidden=v;}
+function ds(el,v){v=!!v;if(el.disabled!==v)el.disabled=v;}
+function ap(el,v){v=v?'true':'false';if(el.getAttribute('aria-pressed')!==v)el.setAttribute('aria-pressed',v);}
+
+/* pips: 5 kills + boss on the field, 4 floors + guardian in a dungeon */
+let pipEls=[],pipMode='';
+function renderPips(dun){
+  const key=dun?'d':'m';if(pipMode===key)return;pipMode=key;
+  const n=dun?DUN_GUARD-1:KPS;
+  let h='';for(let i=0;i<n;i++)h+='<div class="pip"></div>';
+  h+='<div class="pip boss"></div><span>'+(dun?'番人':'ボス')+'</span>';
+  E.pips.innerHTML=h;pipEls=Array.from(E.pips.querySelectorAll('.pip'));
+}
+
+/* dungeon cards */
+const dunEls={};
+(function(){
+  let h='';
+  for(const D of DUN){
+    h+='<article class="dun '+D.id+'" id="dc_'+D.id+'"><div class="tile" aria-hidden="true">'+D.g+'</div><h2>'+D.n+'</h2><p class="r">'+D.r+'</p><p class="t">'+D.t+'</p><div class="foot"><span class="t" id="dk_'+D.id+'"></span><div class="dbtns"><button type="button" class="btn ghost" data-quick="'+D.id+'" id="dq_'+D.id+'">クイック</button><button type="button" class="btn" data-dun="'+D.id+'" id="db_'+D.id+'">挑戦する</button></div></div></article>';
+  }
+  E.dunList.innerHTML=h;
+  for(const D of DUN)dunEls[D.id]={c:$('dc_'+D.id),k:$('dk_'+D.id),b:$('db_'+D.id),q:$('dq_'+D.id)};
+})();
+
+/* soul altar rows */
+const soulEls={};
+(function(){
+  let h='';
+  for(const s of SOUL){
+    h+='<div class="row"><h2>'+s.n+' <small class="lead" id="sl_'+s.id+'"></small></h2><div class="d" id="sd_'+s.id+'"></div><button type="button" class="btn" data-soul="'+s.id+'" id="sb_'+s.id+'"></button></div>';
+  }
+  E.soulList.innerHTML=h;
+  for(const s of SOUL)soulEls[s.id]={lv:$('sl_'+s.id),d:$('sd_'+s.id),b:$('sb_'+s.id)};
+})();
+/* star altar rows */
+const starEls={};
+(function(){
+  let h='';
+  for(const s of STAR)h+='<div class="row"><h2>'+s.n+' <small class="lead" id="xl_'+s.id+'"></small></h2><div class="d" id="xd_'+s.id+'"></div><button type="button" class="btn" data-star="'+s.id+'" id="xb_'+s.id+'"></button></div>';
+  E.starList.innerHTML=h;
+  for(const s of STAR)starEls[s.id]={lv:$('xl_'+s.id),d:$('xd_'+s.id),b:$('xb_'+s.id)};
+})();
+function clock(sec){sec=Math.max(0,Math.ceil(sec));const m=Math.floor(sec/60),s=sec%60;return m+':'+(s<10?'0':'')+s;}
+
+/* training rows */
+const trainEls={};
+(function(){
+  let h='';
+  for(const k of Object.keys(TR)){
+    const t=TR[k];
+    h+='<div class="row"><h2>'+t.n+' <small class="lead" id="tl_'+k+'"></small></h2><div class="d" id="td_'+k+'"></div><button type="button" class="btn" data-train="'+k+'" id="tb_'+k+'"></button></div>';
+  }
+  E.trainList.innerHTML=h;
+  for(const k of Object.keys(TR)){trainEls[k]={lv:$('tl_'+k),d:$('td_'+k),b:$('tb_'+k)};}
+})();
+
+/* floaters */
+/* a side shows at most about five numbers a second (companions keep their own, slower allowance); special events always show */
+function floater(unit,txt,cls,must,key){
+  const now=Date.now(),k=key||'_ft';
+  if(!must&&now-(unit[k]||0)<(key?300:200))return;
+  unit[k]=now;
+  const layer=unit.firstElementChild;
+  while(layer.children.length>5)layer.firstElementChild.remove();
+  const s=document.createElement('span');
+  s.className='fl'+(cls?' '+cls:'');s.textContent=txt;
+  s.style.left=(25+Math.random()*50)+'%';
+  layer.appendChild(s);
+  setTimeout(function(){s.remove();},900);
+}
+function hitFlash(unit){
+  unit.classList.add('hit');
+  clearTimeout(unit._t);
+  unit._t=setTimeout(function(){unit.classList.remove('hit');},110);
+}
+
+/* tree + detail */
+function renderTree(){
+  let lines='',nodes='';
+  for(const s of SK){
+    for(const p of s.p){
+      const P=SKM[p],on=skLv(S,p)>0;
+      lines+='<line class="ln'+(on?' on '+s.br:'')+'" x1="'+((P.c+.5)*100)+'" y1="'+((P.r+.5)*104)+'" x2="'+((s.c+.5)*100)+'" y2="'+((s.r+.5)*104)+'"/>';
+    }
+  }
+  for(const s of SK){
+    const lv=skLv(S,s.id),open=s.p.every(function(p){return skLv(S,p)>0;}),cap=isFinite(s.max)?lv+'/'+s.max:'Lv'+lv;
+    const cls='node '+s.br+(lv>0?' got':'')+(lv>=s.max?' max':'')+(!open&&lv===0?' locked':'')+(sel===s.id?' sel':'');
+    /* a corner number marks a skill whose auto-learning target is below its max (0 = never auto) */
+    const tg=s.grow?(S.skProof===false?0:-1):(S.skPlan&&skTarget(S,s)<s.max?skTarget(S,s):-1);
+    nodes+='<button type="button" class="'+cls+'" data-id="'+s.id+'" style="left:'+((s.c+.5)*20)+'%;top:'+((s.r+.5)/SK_ROWS*100)+'%" aria-label="'+s.n+' '+cap+(tg>=0?' 自動の目標 '+tg:'')+'"><span class="g">'+s.g+'</span><span class="l">'+cap+'</span>'+(tg>=0?'<span class="tg" aria-hidden="true">'+tg+'</span>':'')+'</button>';
+  }
+  E.tree.innerHTML='<svg viewBox="0 0 500 '+(SK_ROWS*104)+'" aria-hidden="true">'+lines+'</svg>'+nodes;
+}
+let detailKey='';
+function detailKeyNow(){
+  if(!sel)return 'none';
+  const r=canLearn(S,sel);
+  return sel+'|'+skLv(S,sel)+'|'+r.ok+'|'+r.why+'|'+skTarget(S,SKM[sel])+'|'+(skNeed(S)[sel]|0)+'|'+S.skProof;
+}
+function renderDetail(){
+  detailKey=detailKeyNow();
+  if(!sel){E.detail.innerHTML='<p class="hint">スキルを選ぶと効果が表示されます。点線の枠は、前のスキルを習得すると解放されます。</p>';return;}
+  const s=SKM[sel],lv=skLv(S,sel),r=canLearn(S,sel);
+  const effs=s.e.map(function(x){return '<li><span>'+x[0]+'</span><span>'+signed(x[1])+x[2]+' /Lv<em>現在 '+signed(x[1]*lv)+x[2]+'</em></span></li>';}).join('');
+  E.detail.innerHTML='<div class="dh"><b>'+s.n+'</b><span>Lv '+lv+(isFinite(s.max)?' / '+s.max:'(上限なし)')+'</span></div><ul class="eff">'+effs+'</ul>'+tgHtml(s)+'<div class="dfoot"><span class="why">'+(r.ok?'':r.why)+'</span><button type="button" class="btn" id="learnBtn"'+(r.ok?'':' disabled')+'>'+(lv?'強化':'習得')+'  SP '+fmt(skillCost(s,lv))+'</button></div>';
+}
+
+/* skill auto-learning: target row in the detail card, the switch card, and plan edits */
+function tgHtml(s){
+  if(s.grow)return '<div class="tgrow"><span>自動習得</span><span>'+(S.skProof!==false?'ほかの目標に届いたあと、残りのSPで強化':'自動では強化しない')+'</span></div>';
+  const t=skTarget(S,s),need=skNeed(S)[s.id]|0;
+  return '<div class="tgrow"><span>自動習得の目標</span><div class="stepper"><button type="button" class="btn ghost sm" data-tg="-1" aria-label="目標を1つ下げる"'+(t<=0?' disabled':'')+'>−</button><b>Lv '+t+' / '+s.max+'</b><button type="button" class="btn ghost sm" data-tg="1" aria-label="目標を1つ上げる"'+(t>=s.max?' disabled':'')+'>+</button></div></div>'+
+    (need>t?'<p class="hint">この先のスキルを習得するために、Lv '+need+' までは自動で習得します。</p>':'');
+}
+function setTarget(id,v){
+  const s=SKM[id];if(!s||s.grow)return;
+  if(!S.skPlan){S.skPlan={};SK.forEach(function(x){if(!x.grow)S.skPlan[x.id]=x.max;});}
+  S.skPlan[id]=Math.max(0,Math.min(s.max,v));
+  if(SK.every(function(x){return x.grow||S.skPlan[x.id]===x.max;}))S.skPlan=null;
+  renderTree();renderDetail();updateSkAuto();save();
+}
+function updateSkAuto(){
+  E.skAutoSeg.querySelectorAll('button').forEach(function(b){ap(b,(b.dataset.ska==='1')===!!S.skAuto);});
+  if(E.skProofChk.checked!==(S.skProof!==false))E.skProofChk.checked=S.skProof!==false;
+  ds(E.skPlanMax,!S.skPlan);
+  ds(E.skPlanSave,!SK.some(function(x){return !x.grow&&skLv(S,x.id)>0;}));
+  const left=skLeft(S),plan=(S.skPlan?'目標は自分で決めた振り方です(スキルを選ぶと目標のLvを変えられます)':'目標はすべてのスキルを最大までです')+(S.skProof!==false?'。そのあとは勇者の証に振ります。':'。');
+  let t;
+  if(!S.skAuto)t='いまは手動です。「自動」にすると、SPがたまるたびに目標どおり、安いものから順に習得します。転生しても設定は残ります。'+plan;
+  else t=(left>0?'自動で習得しています。目標まで あと SP '+fmt(left)+'。':'目標に届いています。'+(S.skProof!==false?'たまったSPは勇者の証に振ります。':''))+plan+' 手動で振り直したいときは「手動」にしてください。';
+  tx(E.skAutoTxt,t);
+}
+E.skAutoSeg.addEventListener('click',function(ev){
+  const b=ev.target.closest('[data-ska]');if(!b)return;
+  S.skAuto=b.dataset.ska==='1';autoSkill(S);renderTree();renderDetail();updateUI();save();
+});
+E.skProofChk.addEventListener('change',function(){S.skProof=E.skProofChk.checked;autoSkill(S);renderTree();renderDetail();updateUI();save();});
+E.skPlanSave.onclick=function(){
+  const p={};SK.forEach(function(x){if(!x.grow)p[x.id]=skLv(S,x.id);});
+  S.skPlan=SK.every(function(x){return x.grow||p[x.id]===x.max;})?null:p;
+  renderTree();renderDetail();updateUI();save();
+};
+E.skPlanMax.onclick=function(){S.skPlan=null;autoSkill(S);renderTree();renderDetail();updateUI();save();};
+function noteRefund(){if(S.memRefund){say(R,'スキルの自動習得は最初から使えるようになりました。星の祭壇の「スキルの記憶」に使った星 '+S.memRefund+' を返しました。');delete S.memRefund;}}
+
+/* log */
+let logSig='';
+function renderLog(){
+  const sig=R.log.length+'|'+(R.log[R.log.length-1]||'');
+  if(sig===logSig)return;logSig=sig;
+  E.log.innerHTML=R.log.slice(-6).reverse().map(function(m){return '<li>'+m+'</li>';}).join('');
+}
+
+/* main update */
+let tab='battle',uiSlowT=0;
+function updateUI(){
+  st=stats(S);
+  /* long lists whose numbers move every kill (achievements, records, companions, full stats) are redrawn once a second */
+  const now=Date.now(),slow=now-uiSlowT>=1000;if(slow)uiSlowT=now;
+  tx(E.gold,fmt(S.gold));tx(E.spTop,fmt(S.sp));E.spChip.classList.toggle('on',S.sp>0);
+  const showSoul=S.rebirths>0||S.souls>0;hd(E.soulChip,!showSoul);if(showSoul)tx(E.soulTop,fmt(S.souls));
+  const dn=S.dun;
+  renderPips(!!dn);
+  hd(E.modeSeg,!!dn);hd(E.retreat,!dn);hd(E.dunBar,!dn);hd(E.stageNav,!!dn);renderPlaces(!!dn);if(!dn)updateNav();
+  if(dn){
+    const D=DUNM[dn.id],p=(dn.floor-1)%DUN_GUARD,n=DUN_GUARD-1;
+    tx(E.zoneName,D.n);tx(E.stgLbl,'');tx(E.stageNo,dn.floor+'階');
+    tx(E.modeNote,p===n?'番人戦':'番人まであと'+(n-p)+'階');
+    pipEls.forEach(function(el,i){el.classList.toggle('on',i<n?i<p:p>=n);});
+    let gl='残り <b>'+Math.ceil(Math.max(0,st.dunTime-dn.t))+'</b>秒　経験値 +'+fmt(dn.xp)+'　ゴールド +'+fmt(dn.gold);
+    if(dn.sp)gl+='　SP +'+dn.sp;if(dn.souls)gl+='　魂 +'+fmt(dn.souls);
+    if(E.dunBar._h!==gl){E.dunBar._h=gl;E.dunBar.innerHTML=gl;}
+  }else{
+    tx(E.zoneName,pName(S));tx(E.stgLbl,S.place==='main'?'ステージ':'');tx(E.stageNo,pLabel(S,pSt(S)));
+    const adv=S.mode==='advance';
+    ap(E.modeAdv,adv);ap(E.modeFarm,!(adv));
+    tx(E.modeNote,adv?(S.kills>=KPS?'ボス戦':'ボスまであと'+(KPS-S.kills)+'体'):'周回中(ボスなし)');
+    pipEls.forEach(function(p,i){const on=i<KPS?(adv&&i<S.kills):(adv&&S.kills>=KPS);p.classList.toggle('on',on);});
+  }
+  const e=R.enemy;
+  tx(E.lvU,fmt(S.lvl));tx(E.lv,fmt(S.lvl));
+  const cl=CLSM[S.cls]||CLS[0];tx(E.heroG,cl.g);tx(E.heroN,cl.n);
+  tx(E.elInfo,S.dun?'':elTxt(st,R.enemy||enemyFor(pSt(S),false,0,S.place)));
+  if(slow&&!E.dropBox.hidden)renderDrops();
+  if(slow&&!E.fullStats.hidden)renderFull();
+  wd(E.hpFill,S.hp/st.hpMax*100);tx(E.hpTxt,fmt(Math.max(0,S.hp))+' / '+fmt(st.hpMax));
+  if(e){
+    tx(E.foeGlyph,e.glyph);tx(E.foeName,e.name);E.foeSprite.classList.toggle('boss',e.boss);
+    wd(E.foeFill,e.hp/e.max*100);tx(E.foeTxt,fmt(Math.max(0,e.hp))+' / '+fmt(e.max));
+  }else{
+    wd(E.foeFill,0);tx(E.foeTxt,R.dead>0?'':'—');if(R.dead>0)tx(E.foeName,'退却中…');
+  }
+  const need=xpNeed(S.lvl);
+  wd(E.xpFill,S.xp/need*100);tx(E.xpTxt,'経験値 '+fmt(S.xp)+' / '+fmt(need));
+  tx(E.sAtk,fmt(st.atk));tx(E.sDef,fmt(st.def));tx(E.sInt,(st.interval/st.speed).toFixed(2)+'秒');
+  tx(E.sCrit,Math.round(st.crit*100)+'%');tx(E.sCritD,'×'+st.critDmg.toFixed(1));tx(E.sReg,(st.regen*st.speed*100).toFixed(1)+'%/秒');tx(E.sDps,fmt(st.dps));
+  tx(E.sDodge,Math.round(st.dodge*100)+'%');tx(E.sSpd,'×'+st.speed.toFixed(2));
+  renderLog();
+  let can=false;const trView=tab==='train'&&sub==='train';
+  for(const k of TRK){
+    const t=TR[k],lv=S.train[k]||0,c=trainCost(k,lv,S),el=trainEls[k],full=t.max&&lv>=t.max;
+    if(!full&&S.gold>=c)can=true;
+    if(!trView)continue;
+    tx(el.lv,'Lv '+fmt(lv)+(t.max?' / '+t.max:''));tx(el.d,t.u+' +'+num(t.per)+t.unit+' / 回　現在 +'+num(t.per*lv)+t.unit);
+    if(full){tx(el.b,'最大');ds(el.b,true);}
+    else if(S.buyN===1){tx(el.b,'金 '+fmt(c));ds(el.b,S.gold<c);}
+    else{const pl=trainPlan(k,S.buyN);if(pl.n>0){tx(el.b,'×'+pl.n+'　金 '+fmt(pl.c));ds(el.b,false);}else{tx(el.b,'金 '+fmt(c));ds(el.b,true);}}
+  }
+  if(trView){
+    E.buySeg.querySelectorAll('button').forEach(function(b){ap(b,+b.dataset.buy===S.buyN);});
+    hd(E.autoTrBox,stLv(S,'auto')<1);if(E.optAutoTr.checked!==!!S.autoTr)E.optAutoTr.checked=!!S.autoTr;
+  }
+  const showStar=S.awk>0||S.stars>0;hd(E.starChip,!showStar);if(showStar)tx(E.starTop,fmt(S.stars));
+  if(tab==='train'&&sub==='pet')S.petNew=0;
+  hd(E.bdTrain,!(can||mastFree(S)>0||S.petNew>0));hd(E.bdSkill,!(S.sp>0));hd(E.bdPet,!(S.petNew>0));
+  renderPetRow();
+  const fighting=!!(CO.B&&!CO.paid);
+  hd(E.coopBanner,!fighting);hd(E.bdCoop,!(fighting&&tab!=='coop'));
+  if(tab==='train'){if(sub==='equip')updateEquip();if(sub==='mast')renderMast();if(sub==='pet'&&slow)renderPets();}
+  if(tab==='coop')updateCoop(false);
+  hd(E.bdDun,!(!S.dun&&S.keys>=keysMax(S)&&DUN.some(function(D){return dunOpen(S,D);})));
+  hd(E.bdReb,!((S.rebirths===0&&soulGain(S)>0)||(S.awk===0&&starGain(S)>0)||SOUL.some(function(s){const lv=soLv(S,s.id);return !(s.max&&lv>=s.max)&&S.souls>=soulCost(s.id,lv);})||STAR.some(function(s){const lv=stLv(S,s.id);return !(s.max&&lv>=s.max)&&S.stars>=starCost(s.id,lv);})));
+  if(tab==='skill'){
+    tx(E.spBig,fmt(S.sp));
+    if(detailKeyNow()!==detailKey)renderDetail();
+    updateSkAuto();
+  }
+  if(tab==='dun')updateDun();
+  if(tab==='reb')updateReb();
+  if(tab==='log'){if(logView==='ach')S.achNew=0;if(slow){if(logView==='ach')renderAch();else if(logView==='ttl')renderTtl();else updateRecord();}}
+  hd(E.bdRec,!(S.achNew>0));hd(E.bdAch,!(S.achNew>0));
+  const tn=ttlName(S);hd(E.heroT,!tn);tx(E.heroT,tn?'〈'+tn+'〉':'');
+  updateDunRes();
+}
+function updateDun(){
+  const mx=keysMax(S);
+  let kp='';for(let i=0;i<mx;i++)kp+='<b class="'+(i<S.keys?'on':'')+'"></b>';
+  if(E.keyPips._h!==kp){E.keyPips._h=kp;E.keyPips.innerHTML=kp;}
+  tx(E.keyNext,S.keys>=mx?S.keys+'本 / '+mx+'本(満タン)':S.keys+'本 / '+mx+'本　次の鍵まで '+clock(keyInterval(S)-S.keyT));
+  tx(E.dunLvl,'制限時間は '+st.dunTime+'秒。いまの1階は、ステージ '+stageLabel(dunBase(S))+' くらいの強さです。'+(st.speed>1?'ゲーム速度 ×'+st.speed.toFixed(2)+' で戦うので、同じ時間でより多く戦えます。':''));
+  for(const D of DUN){
+    const el=dunEls[D.id],open=dunOpen(S,D),here=!!(S.dun&&S.dun.id===D.id),best=S.dunBest[D.id]||0;
+    el.c.classList.toggle('locked',!open);el.c.classList.toggle('here',here);
+    tx(el.k,open?(best?'最高 '+best+'階':'まだ挑戦していません'):(D.reb?'1回転生すると解放':'ステージ '+stageLabel(D.stage)+' に到達すると解放'));
+    tx(el.b,here?'挑戦中':(open?'挑戦する':'未解放'));
+    ds(el.b,!open||!!S.dun||S.keys<1);
+    const qn=S.qkAll?Math.max(1,S.keys):1;
+    hd(el.q,!open);tx(el.q,'クイック'+(qn>1?' ×'+qn:''));ds(el.q,!open||!!S.dun||S.keys<1);
+  }
+  E.qkSeg.querySelectorAll('button').forEach(function(b){ap(b,(b.dataset.qk==='all')===!!S.qkAll);});
+}
+function updateReb(){
+  tx(E.soulBig,fmt(S.souls));
+  tx(E.rebCount,'転生 '+S.rebirths+'回　通算の最高 '+stageLabel(Math.max(S.bestStage,S.maxStage)));
+  const g=soulGain(S);let h;
+  if(S.maxStage<REB_STAGE){
+    h='<p>ステージ '+stageLabel(REB_STAGE)+' に到達すると転生できます。この周回の最高は '+stageLabel(S.maxStage)+' です。</p>';
+  }else{
+    h='<p class="gain">いま転生すると 魂 +'+fmt(g)+'</p><p class="hint">この周回の最高ステージ '+stageLabel(S.maxStage)+' と Lv '+fmt(S.lvl)+' から計算しています。あと1ステージ進むと +'+fmt(soulGain(S,S.maxStage+1))+' になります。</p>';
+    if(S.dun)h+='<p class="hint">ダンジョンから帰還すると転生できます。</p>';
+  }
+  if(E.rebBody._h!==h){E.rebBody._h=h;E.rebBody.innerHTML=h;}
+  ds(E.rebBtn,g<1||!!S.dun);
+  for(const s of SOUL){
+    const lv=soLv(S,s.id),el=soulEls[s.id],full=s.max&&lv>=s.max;
+    tx(el.lv,'Lv '+lv+(s.max?' / '+s.max:''));
+    tx(el.d,s.mul?(s.u+' ×'+s.mul+' / Lv　現在 ×'+fmtMul(soMul(S,s.id))):(s.e+' / Lv'+(s.id==='speed'?'　現在 ×'+st.speed.toFixed(2):'')));
+    if(full){tx(el.b,'最大');ds(el.b,true);}
+    else{const c=soulCost(s.id,lv);tx(el.b,'魂 '+fmt(c));ds(el.b,S.souls<c);}
+  }
+  /* awakening */
+  tx(E.starBig,fmt(S.stars));
+  tx(E.awkCount,'覚醒 '+S.awk+'回　集めた星 '+fmt(S.totalStars));
+  const sg=starGain(S);let ah;
+  if(sg<1)ah='<p>この覚醒の周期で ステージ '+stageLabel(AWK_STAGE)+' に到達すると覚醒できます。いまの周期の最高は '+stageLabel(S.cycBest||1)+' です(転生をまたいで数えます)。</p>';
+  else{
+    ah='<p class="gain">いま覚醒すると 星 +'+fmt(sg)+'</p><p class="hint">この周期の最高ステージ '+stageLabel(S.cycBest)+' から計算しています(転生をまたいで数えます)。あと1ステージ進むと +'+fmt(starGain(S,S.cycBest+1))+' になります。</p>';
+    if(S.dun)ah+='<p class="hint">ダンジョンから帰還すると覚醒できます。</p>';
+  }
+  if(E.awkBody._h!==ah){E.awkBody._h=ah;E.awkBody.innerHTML=ah;}
+  ds(E.awkBtn,sg<1||!!S.dun);
+  const showStar=S.awk>0||S.stars>0;hd(E.starSec,!showStar);
+  if(!showStar)return;
+  for(const s of STAR){
+    const lv=stLv(S,s.id),el=starEls[s.id],full=s.max&&lv>=s.max;
+    tx(el.lv,s.max===1?(lv?'習得済み':''):'Lv '+lv+(s.max?' / '+s.max:''));
+    tx(el.d,s.mul?(s.u+' ×'+s.mul+' / Lv　現在 ×'+fmtMul(stMul(S,s.id))):(s.e+(s.max>1?' / Lv':'')));
+    if(full){tx(el.b,s.max===1?'習得済み':'最大');ds(el.b,true);}
+    else{const c=starCost(s.id,lv);tx(el.b,'星 '+fmt(c));ds(el.b,S.stars<c);}
+  }
+  const hasReb=stLv(S,'reb')>0;
+  hd(E.autoBox,!hasReb);
+  if(hasReb){
+    const zmax=Math.floor((Math.max(S.bestStage,S.maxStage)-1)/10),sig=zmax+'|'+S.autoReb;
+    if(E.optReb._s!==sig){E.optReb._s=sig;let o='<option value="0">しない</option>';for(let z=2;z<=zmax;z++){const v=z*10+1;o+='<option value="'+v+'">ステージ '+stageLabel(v)+' に着いたら転生</option>';}E.optReb.innerHTML=o;E.optReb.value=String(S.autoReb||0);}
+  }
+  tx(E.autoNote,hasReb&&S.autoReb>1?'自動転生: この周回の最高ステージが '+stageLabel(S.autoReb)+' に着くと転生します。':'');
+}
+function trainPlan(k,lim){const t=TR[k];let lv=S.train[k]||0,n=0,c=0;const cap=t.max||Infinity,want=lim>0?lim:Infinity;while(n<want&&lv<cap&&n<10000){const x=trainCost(k,lv,S);if(c+x>S.gold)break;c+=x;lv++;n++;}return {n:n,c:c};}
+function updateDunRes(){
+  const r=R.dunRes;
+  if(!r){if(!E.dunRes.hidden)hd(E.dunRes,true);return;}
+  const qn=S.qkAll?Math.max(1,S.keys):1;
+  tx(E.drAgain,r.quick?'もう一度クイック'+(qn>1?' ×'+qn:''):'もう一度挑戦');
+  ds(E.drAgain,S.keys<1||!!S.dun||!DUNM[r.id]||!dunOpen(S,DUNM[r.id]));
+  if(r.shown)return;r.shown=true;
+  let t;
+  if(r.quick){
+    tx(E.drTitle,r.name+'でクイック受け取りしました');
+    t='鍵 '+r.runs.length+'本ぶん、'+r.runs.map(function(f){return f+'階';}).join('・')+'まで踏破'+(r.best?'(自己ベスト)':'')+'。'+(r.died?'うち'+r.died+'回は力尽きて帰還しました。':'');
+  }else{
+    const head={die:'力尽きて帰還',retreat:'撤退して帰還',clear:'踏破して帰還',stop:'中断して帰還',time:'時間切れで帰還'}[r.why]||'帰還';
+    tx(E.drTitle,r.name+'から'+head.replace('帰還','帰還しました'));
+    t=r.cleared?r.cleared+'階まで踏破'+(r.best?'(自己ベスト)':'')+'。':'1階も踏破できませんでした。';
+  }
+  t+='<br>経験値 +'+fmt(r.xp)+'　ゴールド +'+fmt(r.gold);
+  if(r.sp)t+='　SP +'+r.sp;if(r.souls)t+='　魂 +'+fmt(r.souls);if(r.ore)t+='　鉱石 +'+r.ore;
+  E.drTxt.innerHTML=t;hd(E.dunRes,false);
+}
+function updateRecord(){
+  const rows=[['現在のレベル','Lv '+fmt(S.lvl)],['この周回の最高ステージ',stageLabel(S.maxStage)],['通算の最高ステージ',stageLabel(Math.max(S.bestStage,S.maxStage))],['転生した回数',S.rebirths+'回'],['集めた魂',fmt(S.totalSouls)]];
+  DUN.forEach(function(D){if(dunOpen(S,D))rows.push([D.n+'の最高',(S.dunBest[D.id]||0)+'階']);});
+  PLACES.forEach(function(P){if(P.el)rows.push([P.n+'の最高','Lv '+S.el[P.id].best]);});
+  rows.push(['熟練度',CLS.map(function(c){return c.n+' '+mastOf(S,c.id).lv;}).join('・')]);
+  rows.push(['職業',(CLSM[S.cls]||CLS[0]).n],['協力ステージのクリア',Object.keys(S.coopClr).length+' / '+COOP.length+'ステージ'],['鉱石',fmt(S.ore)]);
+  rows.push(['仲間の種類',dexN(S)+' / '+PETS.length+'種'],['実績',achPts(S)+' / '+ACH_ALL]);
+  if(S.awk>0)rows.push(['覚醒した回数',S.awk+'回'],['この周期の最高ステージ',stageLabel(S.cycBest||1)],['集めた星',fmt(S.totalStars)]);
+  rows.push(['倒した敵',fmt(S.totalKills)+'体'],['ボスと番人を倒した数',fmt(S.bossKills||0)+'体'],['稼いだゴールド',fmt(S.totalGold)],['倒された回数',S.deaths+'回'],['プレイ時間',fmtTime(S.playMs/1000)]);
+  const h=rows.map(function(r){return '<div><dt>'+r[0]+'</dt><dd>'+r[1]+'</dd></div>';}).join('');
+  if(E.rec._h!==h){E.rec._h=h;E.rec.innerHTML=h;}
+  tx(E.offInfo,'画面を閉じている間も、安全に勝てるステージで敵を倒し続けます。効率は '+Math.round(st.offEff*100)+'%、上限は '+st.offCap+'時間です。放置中はボスに挑まず、ステージも進みません。ダンジョンの鍵も放置中に回復します。');
+}
+/* a fast hero lands many hits in one update; only the ones that matter most get a number on screen,
+   so a phone is not creating and animating dozens of elements a second */
+function drain(){
+  if(!R.ev.length)return;
+  const foe=[],pets=[],hero=[];
+  for(const ev of R.ev){
+    if(ev.t==='hit'){if(ev.to==='foe')foe.push(ev);else hero.push(ev);}
+    else if(ev.t==='pet')pets.push(ev);
+    else if(ev.t==='miss')floater(E.heroUnit,'見切り','',true);
+    else if(ev.t==='guts')floater(E.heroUnit,'不屈','crit',true);
+    else if(ev.t==='join')floater(E.heroUnit,'仲間!','crit',true);
+  }
+  R.ev.length=0;
+  if(foe.length){
+    foe.sort(function(a,b){return ((b.ult||b.crit)?1:0)-((a.ult||a.crit)?1:0)||b.v-a.v;});
+    const ev=foe[0];floater(E.foeUnit,(ev.ult?'奥義 ':(ev.dbl?'連 ':''))+fmt(ev.v),(ev.crit||ev.ult)?'crit':'',ev.ult);
+    hitFlash(E.foeUnit);
+  }
+  if(pets.length){
+    const ev=pets[pets.length-1];floater(E.foeUnit,ev.g+' '+fmt(ev.v),'pet',false,'_fp');
+    const seen={};pets.forEach(function(p){if(!seen[p.i]){seen[p.i]=1;petFlash(p.i);}});
+  }
+  if(hero.length){const ev=hero.reduce(function(a,b){return b.v>a.v?b:a;});floater(E.heroUnit,fmt(ev.v),'dmg');hitFlash(E.heroUnit);}
+}
+
+/* offline report */
+function showReport(rep){
+  let t='不在 '+fmtTime(rep.secs)+(rep.capped?'(上限 '+rep.cap+'時間まで計算)':'')+'。<br>';
+  if(rep.kills>0){
+    t+=(rep.label||('ステージ '+stageLabel(rep.stage)))+' で敵を '+fmt(rep.kills)+' 体倒し、経験値 +'+fmt(rep.xp)+'、ゴールド +'+fmt(rep.gold)+' を得ました(効率 '+Math.round(rep.eff*100)+'%'+(rep.speed>1?'、速度 ×'+rep.speed.toFixed(2):'')+')。';
+    if(rep.lv1>rep.lv0)t+='<br>Lv '+fmt(rep.lv0)+' → Lv '+fmt(rep.lv1);
+  }else{
+    t+='このステージの敵に苦戦して、成果はありませんでした。周回モードか鍛錬で強くなりましょう。';
+  }
+  if(rep.mast>0)t+='<br>熟練度 +'+fmt(rep.mast);
+  if(rep.pet>0)t+='<br>連れている仲間の経験値 +'+fmt(rep.pet);
+  if(rep.keys>0)t+='<br>ダンジョンの鍵 +'+rep.keys+'本';
+  E.repTxt.innerHTML=t;hd(E.report,false);
+}
+
+/* ---------- places, stage navigation, drops, full stats ---------- */
+let placeSig='',craftSel=0;
+function elChip(el){return el&&ELN[el]?'<span class="elc el-'+el+'">'+ELN[el]+'</span> ':'';}
+function elPw(pw){if(!pw)return '';return '　武器 '+(ELN[pw.ew]||'なし')+'・防具 '+(ELN[pw.ea]||'なし');}
+function renderPlaces(inDun){
+  const h=PLACES.map(function(P){const open=placeOpen(S,P);return '<button type="button" data-place="'+P.id+'" aria-pressed="'+(S.place===P.id?'true':'false')+'"'+(!open||inDun?' disabled':'')+'>'+P.n+'</button>';}).join('');
+  if(h!==placeSig){placeSig=h;E.placeSeg.innerHTML=h;}
+}
+function updateNav(){
+  const cur=pSt(S),mx=pMx(S),locked=Math.max(S.bestStage,S.maxStage)<PLACES[1].need;
+  tx(E.navInfo,'最高 '+pLabel(S,mx)+(locked?'　属性ダンジョンは '+stageLabel(PLACES[1].need)+' で解放':''));
+  E.stageNav.querySelectorAll('[data-nav]').forEach(function(b){const v=b.dataset.nav;ds(b,(v==='max'||+v>0)?cur>=mx:cur<=1);});
+}
+function elTxt(st,e){
+  let t='敵の属性 '+(e&&e.el?ELN[e.el]:'なし')+'　武器 '+(st.atkEl?ELN[st.atkEl]:'なし');
+  if(e&&e.el&&st.atkEl){const m=elAtk(st.atkEl,e.el);t+=m>1?'(有利 ×1.5)':m<1?'(不利 ×0.7)':'';}
+  t+='　防具 '+(st.defEl?ELN[st.defEl]:'なし');
+  if(e&&e.el&&st.defEl){const m=elDef(e.el,st.defEl);t+=m<1?'(軽減 ×'+m+')':m>1?'(弱点 ×1.3)':'';}
+  return t;
+}
+function boxRows(title,rows,note){return '<p class="boxh">'+title+'</p><dl class="rec txt">'+rows.map(function(r){return '<div><dt>'+r[0]+'</dt><dd>'+r[1]+'</dd></div>';}).join('')+'</dl>'+(note?'<p class="hint">'+note+'</p>':'');}
+function renderDrops(){
+  const P=S.place!=='main'?PLM[S.place]:null,D=P?DROP.el:DROP.main,stg=pSt(S),n=enemyFor(stg,false,0,S.place),b=enemyFor(stg,true,0,S.place),pct=function(x){return (Math.round(x*1000)/10)+'%';};
+  const h=boxRows('このステージで手に入るもの',[
+    ['場所',pName(S)+' '+pLabel(S,stg)+(n.el?'(属性 '+ELN[n.el]+')':'')],
+    ['通常の敵','経験値 '+fmt(n.xp*st.xpMul)+'・ゴールド '+fmt(n.gold*st.goldMul)+'・装備 '+pct(D.n*st.dropMul)],
+    ['ボス','経験値 '+fmt(b.xp*st.xpMul)+'・ゴールド '+fmt(b.gold*st.goldMul)+'・鉱石 +1・装備 '+pct(D.b*st.dropMul)],
+    ['落ちる装備','Lv '+(Math.floor(stg/10)+1)+'　'+(P?ELN[P.el]+'属性の武器・防具(能力 +15%)':'武器・防具・装飾品(属性なし)')],
+    ['レア度',RAR.map(function(r,i){return r.n+' '+D.w[i]+'%';}).join('　')],
+    ['放置中','経験値とゴールドだけ(効率 '+Math.round(st.offEff*100)+'%)。装備と鉱石は落ちません']
+  ],'ボスは「進行」のときに5体倒すごとに出てきます。経験値とゴールドは今の倍率込みの1体あたりの量です。');
+  if(E.dropBox._h!==h){E.dropBox._h=h;E.dropBox.innerHTML=h;}
+}
+function renderFull(){
+  const c=CLSM[S.cls]||CLS[0],pc=function(x){return (Math.round(x*1000)/10)+'%';};
+  const h=boxRows('総合ステータス',[
+    ['職業',c.n],['熟練度','Lv '+mastOf(S).lv+'(残りポイント '+mastFree(S)+')'],['武器の属性',st.atkEl?ELN[st.atkEl]:'なし'],['防具の属性',st.defEl?ELN[st.defEl]:'なし'],
+    ['攻撃力',fmt(st.atk)],['最大体力',fmt(st.hpMax)],['防御力',fmt(st.def)],['秒間ダメージ(目安)',fmt(st.dps)+(st.pets.length?'(うち仲間 '+fmt(st.pdps)+')':'')],
+    ['連れている仲間',st.pets.length?st.pets.map(function(p){return PETM[p.id].n;}).join('・'):'なし'],['図鑑のボーナス','攻撃力・体力・防御力 ×'+st.dexMul.toFixed(2)],['仲間になる確率','×'+st.scout.toFixed(2)],
+    ['攻撃間隔',(st.interval/st.speed).toFixed(2)+'秒'],['会心率',pc(st.crit)],['会心ダメージ','×'+st.critDmg.toFixed(2)],
+    ['連撃(もう1回攻撃)',pc(st.dbl)],['敵の防御を無視',pc(st.pierce)],['ボス・番人への与ダメージ','×'+st.slayer.toFixed(2)],['奥義(6回目の攻撃)',st.ult?'×'+st.ultMul.toFixed(2):'なし'],
+    ['自然回復',(st.regen*st.speed*100).toFixed(2)+'%/秒'],['回避率',pc(st.dodge)],['被ダメージ','×'+st.reduce.toFixed(2)],['吸命',pc(st.leech)],['反撃',pc(st.thorns)],['不屈',st.guts?'体力 '+pc(st.guts)+' で耐える':'なし'],
+    ['獲得経験値','×'+fmtMul(st.xpMul)],['獲得ゴールド','×'+fmtMul(st.goldMul)],['ゲーム速度','×'+st.speed.toFixed(2)],
+    ['放置効率',pc(st.offEff)],['放置の上限',st.offCap+'時間'],['ダンジョンの制限時間',st.dunTime+'秒'],['ダンジョンの経験値・ゴールド','×'+st.loot.toFixed(2)],['装備のドロップ率','×'+st.dropMul.toFixed(2)],
+    ['実績のボーナス','×'+st.achMul.toFixed(2)+'(攻撃力・体力・防御力・経験値・ゴールド)'],['称号',ttlName(S)?ttlName(S)+'('+ttlFxTxt(TTLM[S.title])+')':'なし'],
+    ['星の祭壇',S.awk>0||S.stars>0?'攻撃力 ×'+fmtMul(stMul(S,'atk'))+'・体力と防御力 ×'+fmtMul(stMul(S,'def'))+'・経験値とゴールド ×'+fmtMul(stMul(S,'xp'))+'・魂 ×'+fmtMul(stMul(S,'soul')):'覚醒すると使えます']
+  ],'職業・熟練度・鍛錬・スキル・装備・魂の祭壇をすべて合わせた値です。');
+  if(E.fullStats._h!==h){E.fullStats._h=h;E.fullStats.innerHTML=h;}
+}
+function toggleBox(btn,box,fn){const open=box.hidden;box.hidden=!open;btn.setAttribute('aria-expanded',open?'true':'false');if(open){box._h='';fn();}}
+E.placeSeg.addEventListener('click',function(ev){const b=ev.target.closest('[data-place]');if(b&&setPlace(S,R,b.dataset.place)){say(R,PLM[S.place].n+' '+pLabel(S,pSt(S))+' に移動');updateUI();save();}});
+E.stageNav.addEventListener('click',function(ev){const b=ev.target.closest('[data-nav]');if(!b)return;const v=b.dataset.nav;if(navStage(S,R,v==='max'?'max':+v)){say(R,pLabel(S,pSt(S))+' に移動'+(S.mode==='farm'?'(周回)':''));updateUI();save();}});
+E.dropBtn.onclick=function(){toggleBox(E.dropBtn,E.dropBox,renderDrops);};
+E.statBtn.onclick=function(){toggleBox(E.statBtn,E.fullStats,renderFull);};
+E.craftLv.addEventListener('change',function(){craftSel=+E.craftLv.value||0;updateEquip();});
+E.autoDis.addEventListener('change',function(){S.autoDis=E.autoDis.checked;save();});
+
+/* ---------- class mastery ---------- */
+let mastView='',mastSel=null,mastSig='';
+function fxText(fx,lv){return Object.keys(fx).map(function(k){const f=MFX[k],v=fx[k]*f[1];return '<li><span>'+f[0]+'</span><span>'+(v>0?'+':'')+num(v)+f[2]+' /Lv<em>現在 '+(v*lv>0?'+':'')+num(v*lv)+f[2]+'</em></span></li>';}).join('');}
+function renderMast(){
+  const cls=mastView||S.cls,m=mastOf(S,cls),c=CLSM[cls]||CLS[0];
+  const sg=CLS.map(function(x){return '<button type="button" data-mc="'+x.id+'" aria-pressed="'+(x.id===cls?'true':'false')+'">'+x.n+'</button>';}).join('');
+  if(E.mastSeg._h!==sg){E.mastSeg._h=sg;E.mastSeg.innerHTML=sg;}
+  tx(E.mastName,c.n+'の熟練度'+(cls===S.cls?'(いまの職業)':''));
+  tx(E.mastLv,'Lv '+m.lv+(m.lv>=MAST_MAX?'(最大)':''));
+  const need=mastNeed(m.lv);
+  wd(E.mastFill,m.lv>=MAST_MAX?100:m.xp/need*100);
+  tx(E.mastPts,'熟練ポイント 残り '+mastFree(S,cls)+' / 合計 '+mastPts(m.lv));
+  tx(E.mastNote,(m.lv>=MAST_MAX?'熟練度は最大です。':'次のLvまで '+fmt(Math.max(0,need-m.xp))+'。')+(cls===S.cls?'':'この職業に転職すると熟練度が上がり、ツリーの効果も働きます。'));
+  const h=MT[cls].map(function(d){
+    const lv=m.n[d.id]||0,open=mastPre(d).every(function(x){return m.n[x.id]>0;});
+    return '<button type="button" class="mnode'+(d.r===3?' cap':'')+(d.r===1||d.r===2?' up':'')+(lv>0?' got':'')+(lv>=d.max?' max':'')+(!open&&!lv?' locked':'')+(mastSel===d.id?' sel':'')+'" data-mn="'+d.id+'" style="grid-row:'+(d.r+1)+(d.r===3?'':';grid-column:'+(d.c+1))+'" aria-label="'+d.n+' '+lv+'/'+d.max+'"><span class="g">'+d.g+'</span><span class="nm">'+d.n+'</span><span class="l">'+lv+'/'+d.max+'</span></button>';
+  }).join('');
+  if(h!==mastSig){mastSig=h;E.mastTree.innerHTML=h;}
+  let dh;
+  if(!mastSel||!MTM[mastSel]||MTM[mastSel].cls!==cls)dh='<p class="hint">ノードを選ぶと効果が表示されます。2段目と3段目は真上のノード、いちばん下は3段目のすべてを習得すると解放されます。</p>';
+  else{const d=MTM[mastSel],lv=m.n[d.id]||0,r=mastCan(S,d.id);
+    dh='<div class="dh"><b>'+d.n+'</b><span>Lv '+lv+' / '+d.max+'</span></div><ul class="eff">'+fxText(d.fx,lv)+'</ul><div class="dfoot"><span class="why">'+(r.ok?'':r.why)+'</span><button type="button" class="btn" id="mastBtn"'+(r.ok?'':' disabled')+'>'+(lv?'強化':'習得')+'  熟練P '+MCOST[d.r]+'</button></div>';}
+  if(E.mastDetail._h!==dh){E.mastDetail._h=dh;E.mastDetail.innerHTML=dh;}
+}
+E.mastSeg.addEventListener('click',function(ev){const b=ev.target.closest('[data-mc]');if(!b||!CLSM[b.dataset.mc])return;mastView=b.dataset.mc;mastSel=null;renderMast();});
+E.mastTree.addEventListener('click',function(ev){const b=ev.target.closest('[data-mn]');if(!b)return;mastSel=b.dataset.mn;mastSig='';renderMast();});
+E.mastDetail.addEventListener('click',function(ev){if(!ev.target.closest('#mastBtn'))return;if(mastSel&&mastLearn(S,mastSel)){mastSig='';renderMast();updateUI();save();netRefresh();}});
+twoStep(E.mastReset,'この職業のツリーを振り直す','もう一度押すと全ポイントを返却',function(){mastReset(S,mastView||S.cls);mastSig='';renderMast();updateUI();save();netRefresh();});
+
+/* ---------- companions ---------- */
+let petSig='',dexSig='',dexSel=null;
+const PET_GROUPS=[['main','メインステージ'],['place','属性ダンジョン'],['dun','鍵のダンジョン'],['coop','協力ステージのボス']];
+function elCls(el){return el?' pe-'+el:'';}
+function petFxTxt(p,o){const f=PFX[p.fx];return f[0]+' +'+num(petFxVal(p,o))+f[1];}
+function petAtkTxt(p,o){return '勇者の攻撃力の '+Math.round(petPw(p,o)*st.petMul*100)+'%・'+petIv(p).toFixed(1)+'秒ごと';}
+function petChance(p){
+  const sc=st.scout,pc=function(x){return (Math.round(x*sc*10000)/100)+'%';};
+  if(p.src==='coop')return '初めてクリアすると必ず、2回目からは '+pc(.15)+' で仲間になる';
+  const t=SCOUT[p.src],boss=/(ボス|番人)$/.test(p.w);
+  return '倒すと '+pc(t[boss?1:0])+' で仲間になる';
+}
+function slotNeed(i){return i===1?'ステージ '+stageLabel(21)+' に着くと解放':i===2?'ステージ '+stageLabel(51)+' に着くと解放':'星の祭壇「仲間の枠」で解放';}
+function renderPets(){
+  const max=partyMax(S),ids=Object.keys(S.pets),show=Math.max(3,max)+(max<4&&(S.awk>0||S.stars>0)?1:0);
+  const sig=JSON.stringify([S.party,ids.map(function(k){const o=S.pets[k];return k+o.lv+'.'+o.b+'.'+Math.floor(o.xp/petNeed(o.lv)*20);}),max,show,Math.round(st.petMul*100),Math.round(st.scout*100)]);
+  if(sig!==petSig){
+    petSig=sig;
+    let h='';
+    for(let i=0;i<Math.min(4,show);i++){
+      const id=S.party[i],p=id&&PETM[id],o=id&&S.pets[id];
+      if(i>=max)h+='<div class="pslot empty">'+slotNeed(i)+'</div>';
+      else if(p&&o)h+='<div class="pslot"><div class="tile'+elCls(p.el)+'" aria-hidden="true">'+p.g+'</div><b>'+esc(p.n)+'</b><span class="istat">Lv '+o.lv+'・絆 '+o.b+'</span><button type="button" class="btn ghost sm" data-pt="'+id+'">外す</button></div>';
+      else h+='<div class="pslot empty">空き</div>';
+    }
+    E.ptySlots.innerHTML=h;
+    tx(E.ptyNote,ids.length?S.party.length+' / '+max+'体':'');
+    tx(E.petN,ids.length?ids.length+'体':'');
+    const order=ids.sort(function(a,b){const ia=S.party.indexOf(a),ib=S.party.indexOf(b);if((ia>=0)!==(ib>=0))return ia>=0?-1:1;if(ia>=0)return ia-ib;const pa=PETM[a],pb=PETM[b],oa=S.pets[a],ob=S.pets[b];return pb.rk-pa.rk||ob.lv-oa.lv||ob.b-oa.b||(a<b?-1:1);});
+    E.petList.innerHTML=order.length?order.map(function(id){
+      const p=PETM[id],o=S.pets[id],inP=S.party.indexOf(id)>=0,full=!inP&&S.party.length>=max,need=petNeed(o.lv);
+      return '<div class="petrow"><div class="tile'+elCls(p.el)+'" aria-hidden="true">'+p.g+'</div>'+
+        '<div class="pn"><span>'+esc(p.n)+'</span><span class="rk">'+PET_RK[p.rk-1]+'</span>'+elChip(p.el)+'<span class="istat">Lv '+o.lv+(o.lv>=PET_LV?'(最大)':'')+'・絆 '+o.b+(o.b>=PET_BOND?'(最大)':'')+'</span></div>'+
+        '<div class="istat">加護 '+petFxTxt(p,o)+'　攻撃 '+petAtkTxt(p,o)+'</div>'+
+        '<div class="bar xpbar"><i style="width:'+(o.lv>=PET_LV?100:Math.min(100,o.xp/need*100)).toFixed(1)+'%"></i></div>'+
+        '<div class="act"><button type="button" class="btn sm'+(inP?' ghost':'')+'" data-pt="'+id+'"'+(full?' disabled':'')+'>'+(inP?'外す':'連れていく')+'</button></div></div>';
+    }).join(''):'<p class="hint">まだ仲間はいません。敵を倒していると、ときどき仲間になりたがります。ボスや番人ほど仲間になりやすく、協力ステージのボスは初めてクリアしたときに必ず仲間になります。</p>';
+  }
+  const dsig=JSON.stringify([ids.length,Object.keys(S.pets).map(function(k){return k+S.pets[k].b;}).join(),dexSel]);
+  if(dsig!==dexSig){
+    dexSig=dsig;
+    const n=dexN(S);
+    tx(E.dexN,n+' / '+PETS.length+'種');
+    tx(E.dexNote,'集めた種類ごとに 攻撃力・体力・防御力 +'+Math.round(DEX_PER*100)+'%(いま ×'+(1+DEX_PER*n).toFixed(2)+')。マスを選ぶと、どこで仲間になるかが分かります。');
+    E.dexGrid.innerHTML=PET_GROUPS.map(function(gp){
+      return '<div class="dexsec"><h3>'+gp[1]+'</h3><div class="dexg">'+PETS.filter(function(p){return p.src===gp[0];}).map(function(p){const own=!!S.pets[p.id];return '<button type="button" class="dx'+(own?elCls(p.el):' no')+(dexSel===p.id?' sel':'')+'" data-dx="'+p.id+'" aria-label="'+(own?esc(p.n):'まだ仲間になっていない')+'">'+(own?p.g:'？')+'</button>';}).join('')+'</div></div>';
+    }).join('');
+    let dh='';
+    const p=dexSel&&PETM[dexSel];
+    hd(E.dexDetail,!p);
+    if(p){
+      const o=S.pets[p.id];
+      dh='<div class="dh"><b>'+(o?esc(p.n):'？？？')+'</b><span><span class="rk">'+PET_RK[p.rk-1]+'</span> '+elChip(p.el)+' <button type="button" class="btn ghost sm" data-dxclose="1">閉じる</button></span></div>'+
+        '<ul class="eff"><li><span>出会える場所</span><span>'+esc(p.w)+'</span></li><li><span>仲間になる</span><span>'+petChance(p)+'</span></li>'+
+        '<li><span>加護</span><span>'+(o?petFxTxt(p,o)+'(絆 '+o.b+')':PFX[p.fx][0]+'を上げる')+'</span></li>'+
+        (o?'<li><span>攻撃</span><span>'+petAtkTxt(p,o)+'</span></li><li><span>レベル</span><span>Lv '+o.lv+' / '+PET_LV+'</span></li>':'')+'</ul>';
+    }
+    if(E.dexDetail._h!==dh){E.dexDetail._h=dh;E.dexDetail.innerHTML=dh;}
+  }
+}
+function petClick(ev){
+  const b=ev.target.closest('[data-pt]');if(!b)return;
+  const before=stats(S).hpMax;
+  if(partyToggle(S,b.dataset.pt)){const after=stats(S).hpMax;S.hp=Math.min(after,S.hp*after/before);R.pt=[];petSig='';renderPets();updateUI();save();netRefresh();}
+}
+E.ptySlots.addEventListener('click',petClick);
+E.petList.addEventListener('click',petClick);
+E.dexGrid.addEventListener('click',function(ev){const b=ev.target.closest('[data-dx]');if(!b)return;dexSel=dexSel===b.dataset.dx?null:b.dataset.dx;renderPets();});
+E.dexDetail.addEventListener('click',function(ev){if(ev.target.closest('[data-dxclose]')){dexSel=null;renderPets();}});
+let petRowSig='';
+function renderPetRow(){
+  const sig=st.pets.map(function(p){return p.id;}).join(',');
+  if(sig===petRowSig)return;petRowSig=sig;
+  E.petRow.innerHTML=st.pets.map(function(p,i){return '<span class="pt'+elCls(p.el)+'" title="'+esc(PETM[p.id].n)+'">'+p.g+'</span>';}).join('');
+}
+function petFlash(i){const t=E.petRow.children[i];if(!t)return;t.classList.add('hit');clearTimeout(t._t);t._t=setTimeout(function(){t.classList.remove('hit');},120);}
+
+/* ---------- achievements and titles ---------- */
+let logView='ach',achSig='',ttlSig='';
+function achVal(a,v){
+  if(a.st)return stageLabel(Math.max(1,Math.floor(v)));
+  if(a.id==='time')return (Math.floor(v*10)/10)+'時間';
+  return (a.pre||'')+fmt(v)+(a.u||'');
+}
+function renderAch(){
+  const pts=achPts(S);
+  tx(E.achBig,pts+' / '+ACH_ALL);
+  tx(E.achNote,'実績を1つ達成するごとに、攻撃力・体力・防御力・経験値・ゴールドが +'+Math.round(ACH_PER*100)+'%(いま ×'+(1+ACH_PER*pts).toFixed(2)+')。転生や覚醒をしても残ります。');
+  const h=ACH.map(function(a){
+    const v=a.f(S),t=S.ach[a.id]|0,done=t>=a.t.length,next=a.t[Math.min(t,a.t.length-1)],prev=t>0?a.t[t-1]:0;
+    /* tiers that grow tenfold or more fill the bar on a log scale */
+    let p=100;
+    if(!done)p=prev>0&&next/prev>=10?(Math.log(Math.max(v,prev))-Math.log(prev))/(Math.log(next)-Math.log(prev))*100:(v-prev)/(next-prev)*100;
+    let pips='';for(let i=0;i<a.t.length;i++)pips+='<b class="'+(i<t?'on':'')+'"></b>';
+    return '<div class="achrow'+(done?' done':'')+'"><div><h3>'+a.n+'</h3><div class="apips" role="img" aria-label="★'+t+' / '+a.t.length+'">'+pips+'</div></div><div class="v">'+(done?'すべて達成':achVal(a,Math.min(v,next))+' / '+achVal(a,next))+'</div><div class="bar"><i style="width:'+Math.max(0,Math.min(100,p)).toFixed(1)+'%"></i></div></div>';
+  }).join('');
+  if(h!==achSig){achSig=h;E.achList.innerHTML=h;}
+}
+function ttlFxTxt(T){return Object.keys(T.fx).map(function(k){const f=TFX[k],v=T.fx[k]*f[2];return f[0]+' +'+num(v)+f[1];}).join('・');}
+function ttlNeed(T){const a=ACHM[T.a[0]];return '実績「'+a.n+'」★'+T.a[1]+'('+achVal(a,a.t[T.a[1]-1])+')';}
+function ttlName(S){const T=TTLM[S.title];return T&&ttlOpen(S,T)?T.n:'';}
+function renderTtl(){
+  const h=TTL.slice().sort(function(a,b){return (ttlOpen(S,b)?1:0)-(ttlOpen(S,a)?1:0);}).map(function(T){
+    const open=ttlOpen(S,T),on=open&&S.title===T.id;
+    return '<div class="ttlrow'+(on?' on':'')+(open?'':' locked')+'"><h3>'+T.n+'</h3><div class="act">'+(open?'<button type="button" class="btn sm'+(on?' ghost':'')+'" data-ttl="'+T.id+'">'+(on?'外す':'付ける')+'</button>':'')+'</div><p class="istat">'+(open?'効果 '+ttlFxTxt(T):'条件 '+ttlNeed(T)+'　効果 '+ttlFxTxt(T))+'</p></div>';
+  }).join('');
+  if(h!==ttlSig){ttlSig=h;E.ttlList.innerHTML=h;}
+}
+E.ttlList.addEventListener('click',function(ev){
+  const b=ev.target.closest('[data-ttl]');if(!b||!TTLM[b.dataset.ttl])return;
+  const before=stats(S).hpMax;S.title=S.title===b.dataset.ttl?'':b.dataset.ttl;const after=stats(S).hpMax;S.hp=Math.min(after,S.hp*after/before);
+  renderTtl();updateUI();save();netRefresh();
+});
+function showLog(v){
+  logView=v;
+  ['ach','ttl','rec'].forEach(function(k){$('lv-'+k).hidden=k!==v;});
+  E.logSeg.querySelectorAll('button').forEach(function(b){b.setAttribute('aria-pressed',b.dataset.lv===v?'true':'false');});
+  if(v==='ach'){S.achNew=0;achSig='';renderAch();}
+  if(v==='ttl'){ttlSig='';renderTtl();}
+  if(v==='rec')updateRecord();
+}
+E.logSeg.addEventListener('click',function(ev){const b=ev.target.closest('[data-lv]');if(b)showLog(b.dataset.lv);});
+
+/* ---------- class & equipment ---------- */
+let sub='train',invSig='';
+function esc(s){return String(s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function showSub(name){
+  sub=name;
+  ['train','equip','class','mast','pet'].forEach(function(s){$('sub-'+s).hidden=s!==name;});
+  E.subSeg.querySelectorAll('button').forEach(function(b){b.setAttribute('aria-pressed',b.dataset.sub===name?'true':'false');});
+  if(name==='class')renderClass();
+  if(name==='mast'){mastSig='';renderMast();}
+  if(name==='equip'){invSig='';updateEquip();}
+  if(name==='pet'){S.petNew=0;petSig='';dexSig='';renderPets();}
+}
+function renderClass(){
+  E.clsList.innerHTML=CLS.map(function(c){
+    const on=S.cls===c.id;
+    return '<article class="clscard'+(on?' on':'')+'"><div class="ch"><div class="tile" aria-hidden="true">'+c.g+'</div><div><h2>'+c.n+'</h2><p class="mult">攻撃 ×'+c.atk+'　体力 ×'+c.hp+'　防御 ×'+c.def+'　速さ ×'+c.spd+'</p><p class="mult">熟練度 Lv '+mastOf(S,c.id).lv+'</p></div></div><p class="hint">'+c.d+'</p><p class="co"><b>協力</b> '+c.co+'</p><button type="button" class="btn'+(on?' ghost':'')+'" data-cls="'+c.id+'"'+(on?' disabled':'')+'>'+(on?'いまの職業':'この職業にする')+'</button></article>';
+  }).join('');
+}
+function itemName(it){return '<span class="iname r'+it.r+'">'+elChip(it.el)+esc(it.nm)+(it.p?' <span class="plus">+'+it.p+'</span>':'')+'</span>';}
+function statTxt(k,v){const d=EST[k];return d[0]+' +'+num(v)+d[1];}
+function itemStats(it){const em=enhMul(it);return it.m.map(function(p){return statTxt(p[0],p[1]*em);}).concat(it.x.map(function(p){return statTxt(p[0],p[1]);})).join('　');}
+function itemCmp(it){
+  const cur=S.eq[it.s];if(!cur)return ' <span class="up">空き</span>';
+  const a=it.m[0],b=cur.m[0];if(a[0]!==b[0])return '';
+  const dv=Math.round((a[1]*enhMul(it)-b[1]*enhMul(cur))*10)/10;
+  return dv>0?' <span class="up">▲'+num(dv)+EST[a[0]][1]+'</span>':(dv<0?' <span class="down">▼'+num(-dv)+EST[a[0]][1]+'</span>':'');
+}
+/* blacksmith card: enhance, reforge the sub-stats, or change the element of one piece */
+let gearVer=0,smSel=0,smMsg='',smSig='';
+function renderSmith(){
+  const it=smSel?findItem(S,smSel):null;
+  if(!it){smSel=0;if(!E.smith.hidden)hd(E.smith,true);return;}
+  hd(E.smith,false);
+  const ec=enhCost(it),rc=refCost(it),lc=elCost(it),rate=enhRate(it,st),p=it.p|0,max=p>=ENH_MAX,worn=S.eq[it.s]===it;
+  const can=function(c){return S.ore>=c.o&&S.gold>=c.g;};
+  const sig=[it.id,p,it.f|0,JSON.stringify(it.x),it.el,can(ec),can(rc),can(lc),Math.round(rate*100),smMsg,worn,S.ore].join('|');
+  if(sig===smSig)return;smSig=sig;
+  const cur=it.m.map(function(q){return statTxt(q[0],q[1]*enhMul(it));}).join('　');
+  const nxt=it.m.map(function(q){return statTxt(q[0],q[1]*(1+.1*(p+1)));}).join('　');
+  let h='<div class="dh"><b>'+itemName(it)+'</b><button type="button" class="btn ghost sm" data-sm="close">閉じる</button></div>';
+  h+='<p class="istat">'+EQS[it.s].n+'・Lv '+(it.t+1)+'・'+RAR[it.r].n+(worn?'・装備中':'')+'　持っている鉱石 '+fmt(S.ore)+'</p>';
+  h+='<div class="smrow"><div><b>強化 '+(max?'+'+p+'(最大)':'+'+p+' → +'+(p+1))+'</b><div class="istat">'+(max?cur:cur+'<br>→ '+nxt)+'</div>'+
+    (max?'':'<div class="istat">成功率 '+Math.round(rate*100)+'%'+(it.f?'(失敗した '+it.f+'回ぶん上乗せ)':'')+'　鉱石 '+ec.o+'・金 '+fmt(ec.g)+'</div>')+'</div>'+
+    (max?'':'<button type="button" class="btn" data-sm="enh"'+(can(ec)?'':' disabled')+'>強化する</button>')+'</div>';
+  if(RAR[it.r].sub)h+='<div class="smrow"><div><b>サブ能力を付け直す</b><div class="istat">いま '+it.x.map(function(q){return statTxt(q[0],q[1]);}).join('　')+'</div><div class="istat">鉱石 '+rc.o+'・金 '+fmt(rc.g)+'</div></div><button type="button" class="btn ghost" data-sm="ref"'+(can(rc)?'':' disabled')+'>付け直す</button></div>';
+  if(it.s!=='r')h+='<div class="smrow"><div><b>属性を付け替える</b><div class="istat">鉱石 '+lc.o+'・金 '+fmt(lc.g)+'</div></div><div class="seg elseg" role="group" aria-label="属性">'+[null].concat(ELS).map(function(e){const on=(it.el||null)===e;return '<button type="button" data-el="'+(e||'none')+'" aria-pressed="'+on+'"'+(!on&&!can(lc)?' disabled':'')+'>'+(e?ELN[e]:'なし')+'</button>';}).join('')+'</div></div>';
+  h+='<p class="hint" role="status">'+smMsg+'</p>';
+  E.smith.innerHTML=h;
+}
+function openSmith(id){smSel=id;smMsg='';smSig='';renderSmith();try{E.smith.scrollIntoView({block:'nearest',behavior:'smooth'});}catch(e){}}
+function updateEquip(){
+  tx(E.oreN,fmt(S.ore));
+  const mx=craftMaxLv(S),full=S.inv.length>=INV_MAX;
+  if(E.craftLv._mx!==mx){E.craftLv._mx=mx;let h='';for(let L=mx;L>=1;L--){const c=craftCost(L);h+='<option value="'+L+'">Lv '+L+'(鉱石 '+c.o+'・金 '+fmt(c.g)+')</option>';}E.craftLv.innerHTML=h;E.craftLv.value=String(Math.min(craftSel||mx,mx));}
+  const L=Math.min(mx,+E.craftLv.value||mx),c=craftCost(L);
+  tx(E.craftCost,'Lv '+L+' を1つ作るのに 鉱石 '+c.o+' と 金 '+fmt(c.g)+'。'+(full?'持ち物がいっぱいです。':''));
+  E.craftBtns.querySelectorAll('button').forEach(function(b){ds(b,full||S.ore<c.o||S.gold<c.g);});
+  if(E.autoDis.checked!==!!S.autoDis)E.autoDis.checked=!!S.autoDis;
+  renderSmith();
+  const sig=S.inv.length+'|'+S.itemSeq+'|'+gearVer+'|'+EQK.map(function(k){return S.eq[k]?S.eq[k].id:0;}).join(',');
+  if(sig===invSig)return;invSig=sig;
+  E.eqSlots.innerHTML=EQK.map(function(k){const it=S.eq[k];return '<div class="eqslot"><span class="sn">'+EQS[k].n+'</span>'+(it?itemName(it)+'<span class="istat">Lv '+(it.t+1)+'・'+RAR[it.r].n+'　'+itemStats(it)+'</span><div class="btnrow"><button type="button" class="btn sm" data-smith="'+it.id+'">鍛える</button><button type="button" class="btn ghost sm" data-uneq="'+k+'">外す</button></div>':'<span class="istat">なし</span>')+'</div>';}).join('');
+  tx(E.invN,S.inv.length+' / '+INV_MAX);
+  const list=S.inv.slice().sort(function(a,b){return EQK.indexOf(a.s)-EQK.indexOf(b.s)||b.r-a.r||(b.p|0)-(a.p|0)||b.t-a.t||b.id-a.id;});
+  E.invList.innerHTML=list.length?list.map(function(it){return '<div class="invrow"><div>'+itemName(it)+' <span class="istat">'+EQS[it.s].n+'・Lv '+(it.t+1)+'・'+RAR[it.r].n+'</span><div class="istat">'+itemStats(it)+itemCmp(it)+'</div></div><div class="btns"><button type="button" class="btn sm" data-eq="'+it.id+'">装備</button><button type="button" class="btn ghost sm" data-smith="'+it.id+'">鍛える</button><button type="button" class="btn ghost sm" data-dism="'+it.id+'">分解 +'+dismOre(it)+'</button></div></div>';}).join(''):'<p class="hint">持ち物はありません。鍛冶屋で作るか、協力ステージで手に入れましょう。</p>';
+}
+E.subSeg.addEventListener('click',function(ev){const b=ev.target.closest('[data-sub]');if(b)showSub(b.dataset.sub);});
+E.clsList.addEventListener('click',function(ev){
+  const b=ev.target.closest('[data-cls]');if(!b||!CLSM[b.dataset.cls])return;
+  const before=stats(S).hpMax;S.cls=b.dataset.cls;const after=stats(S).hpMax;S.hp=Math.min(after,S.hp*after/before);
+  renderClass();updateUI();save();netRefresh();
+});
+E.craftBtns.addEventListener('click',function(ev){
+  const b=ev.target.closest('[data-craft]');if(!b)return;
+  const it=craft(S,b.dataset.craft,+E.craftLv.value||craftMaxLv(S));
+  if(it){E.craftMsg.innerHTML=itemName(it)+'(Lv '+(it.t+1)+'・'+RAR[it.r].n+')を作りました。';updateEquip();save();}
+});
+E.eqSlots.addEventListener('click',function(ev){
+  const s=ev.target.closest('[data-smith]');if(s){openSmith(+s.dataset.smith);return;}
+  const b=ev.target.closest('[data-uneq]');if(b&&unequip(S,b.dataset.uneq)){updateEquip();updateUI();save();netRefresh();}
+});
+E.invList.addEventListener('click',function(ev){
+  const s=ev.target.closest('[data-smith]');if(s){openSmith(+s.dataset.smith);return;}
+  const a=ev.target.closest('[data-eq]'),d=ev.target.closest('[data-dism]');
+  if(a&&equip(S,+a.dataset.eq)){updateEquip();updateUI();save();netRefresh();}
+  if(d&&dismantle(S,+d.dataset.dism)){updateEquip();save();}
+});
+E.smith.addEventListener('click',function(ev){
+  const b=ev.target.closest('[data-sm],[data-el]');if(!b||b.disabled)return;
+  const it=findItem(S,smSel);if(!it)return;
+  if(b.dataset.sm==='close'){smSel=0;smMsg='';renderSmith();return;}
+  if(b.dataset.sm==='enh'){const r=enhance(S,it.id);if(!r)return;smMsg=r==='ok'?'強化に成功しました。+'+it.p+' になりました。':'強化に失敗しました。鉱石と金はなくなり、次の成功率が10%上がります。';}
+  else if(b.dataset.sm==='ref'){if(!reforge(S,it.id))return;smMsg='サブ能力を付け直しました。';}
+  else if(b.dataset.el){const e=b.dataset.el==='none'?null:b.dataset.el;if(!setElem(S,it.id,e))return;smMsg='属性を「'+(e?ELN[e]:'なし')+'」にしました。';}
+  gearVer++;updateEquip();updateUI();save();netRefresh();
+});
+twoStep(E.dismAll,'コモンとレアを分解','もう一度押すと分解',function(){
+  let n=0,o=0;S.inv.filter(function(it){return it.r<=1&&!it.p;}).forEach(function(it){o+=dismantle(S,it.id);n++;});
+  E.craftMsg.textContent=n?n+'個を分解して鉱石 +'+o:'分解できるコモンとレアの装備はありません(強化したものは残します)。';updateEquip();save();
+});
+
+/* ---------- co-op: lobby presence lists open parties; a named room per party; the host's presence carries the run ---------- */
+/* party presence carries this version; pages running a different battle simulation do not see each other */
+const NET_V=2;
+function rcode(n){const a='abcdefghjkmnpqrstuvwxyz23456789';let s='';for(let i=0;i<n;i++)s+=a[Math.floor(Math.random()*a.length)];return s;}
+const NET={room:null,pt:null,code:'',host:false,ready:false,stage:0,peers:[],lobby:[],seen:{},msg:'',busy:false,lastP:0};
+const CO={B:null,run:null,start:0,mine:false,n:1,net:false,thief:false,res:null,paid:false,shown:false,log:[]};
+let coopSig='',ptSig='';
+function myNick(){return S.nick||'冒険者';}
+function myPeer(){const me=NET.peers.find(function(p){return p.sameTab;});return me?me.peer:'';}
+function members(){
+  return NET.peers.filter(function(p){return p.kind==='viewer'&&p.presence&&p.presence.v===NET_V;})
+    .sort(function(a,b){return (a.presence.host?0:1)-(b.presence.host?0:1)||(a.peer<b.peer?-1:a.peer>b.peer?1:0);}).slice(0,4);
+}
+function hostPeer(){return members().find(function(p){return p.presence.host;});}
+function setLobby(){
+  if(!NET.room)return;
+  const h=!!(NET.pt&&NET.host);
+  NET.room.presence({pt:h?NET.code:null,pn:h?members().length:null,pk:h?NET.stage:null,nick:myNick()}).catch(function(){});
+}
+function setParty(extra){
+  if(!NET.pt)return;NET.lastP=Date.now();
+  NET.pt.presence(Object.assign({v:NET_V,nick:myNick(),cls:S.cls,lv:S.lvl,pw:coopPw(S),ti:S.title&&ttlOpen(S,TTLM[S.title])?S.title:null,rdy:NET.host||NET.ready,host:NET.host,pk:NET.host?NET.stage:null},extra||{})).catch(function(){});
+}
+function netRefresh(){setParty();setLobby();updateCoop(true);}
+function netInit(){
+  if(!(window.claude&&typeof window.claude.use==='function')){NET.msg='この画面では協力プレイに接続できません。ひとりでの挑戦はできます。';return;}
+  NET.msg='協力プレイに接続しています…';
+  window.claude.use('room').then(function(r){
+    if(!r){NET.msg='このブラウザでは協力プレイに接続できません。ひとりでの挑戦はできます。';updateCoop(true);return;}
+    NET.room=r;NET.msg='';
+    r.onPeers(function(ch){NET.lobby=ch.peers;updateCoop(true);},function(){NET.room=null;NET.pt=null;NET.peers=[];NET.msg='協力プレイの接続が切れました。ひとりでの挑戦はできます。';updateCoop(true);});
+    setLobby();updateCoop(true);
+  },function(){NET.msg='協力プレイに接続できません。';updateCoop(true);});
+}
+async function openParty(code,host){
+  if(!NET.room||NET.pt||NET.busy)return;
+  NET.busy=true;NET.msg=host?'パーティを作っています…':'パーティに参加しています…';updateCoop(true);
+  let pt;
+  try{pt=await NET.room.join('pt-'+code,{host:host});}
+  catch(e){NET.busy=false;const c=e&&e.code;NET.msg=c==='not_found'?'そのコードのパーティが見つかりません。コードと、作った人がこの画面を開いたままかを確かめてください。':c==='full'?'このパーティは満員です(4人まで)。':c==='taken'?'もう一度「パーティを作る」を押してください。':'接続できませんでした。通信できる場所で、もう一度試してください。';updateCoop(true);return;}
+  NET.busy=false;NET.pt=pt;NET.code=code;NET.host=host;NET.ready=false;NET.peers=[];NET.msg='';NET.joinedAt=Date.now();
+  if(host)NET.stage=Math.min(S.coopMax,NET.stage);
+  pt.onPeers(onParty,function(){if(NET.pt===pt){NET.pt=null;NET.peers=[];NET.host=false;NET.msg='パーティとの接続が切れました。';setLobby();updateCoop(true);}});
+  setParty();setLobby();updateCoop(true);
+  if(!host)setTimeout(function(){if(NET.pt===pt&&pt.peers().filter(function(p){return p.kind==='viewer';}).length>4)leaveParty('このパーティは満員です。');},2500);
+}
+function joinCode(code){
+  code=String(code||'').toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,12);
+  if(code.length<3){NET.msg='パーティのコードを入れてください。';updateCoop(true);return;}
+  openParty(code,false);
+}
+async function leaveParty(m){
+  const pt=NET.pt;NET.pt=null;NET.peers=[];NET.host=false;NET.ready=false;NET.code='';NET.msg=m||'';
+  if(pt){try{await pt.leave();}catch(e){}}
+  setLobby();updateCoop(true);
+}
+function checkHost(){
+  if(!NET.pt)return;
+  const ms=members(),hosts=ms.filter(function(p){return p.presence.host;}),byPeer=function(a,b){return a.peer<b.peer?-1:1;};
+  if(NET.host&&hosts.length>1&&!hosts.slice().sort(byPeer)[0].sameTab){NET.host=false;NET.ready=false;setParty();setLobby();return;}
+  if(!NET.host&&ms.length&&!hosts.length&&Date.now()-NET.joinedAt>4000){
+    if(ms.slice().sort(byPeer)[0].sameTab){NET.host=true;NET.stage=Math.min(S.coopMax,NET.stage);setParty();setLobby();}
+  }
+}
+function onParty(ch){
+  NET.peers=ch.peers;
+  checkHost();
+  const h=hostPeer();
+  if(h&&h.presence.run&&typeof h.presence.run.id==='string'&&!NET.seen[h.presence.run.id]){NET.seen[h.presence.run.id]=1;coopBegin(h.presence.run,true);}
+  if(NET.host)setLobby();
+  updateCoop(true);
+}
+function hostStart(){
+  if(!NET.pt||!NET.host||(CO.B&&!CO.paid))return;
+  const ms=members();
+  if(!ms.length||!ms.every(function(p){return p.presence.rdy;}))return;
+  const run={id:rcode(10),k:NET.stage,seed:Math.floor(Math.random()*4294967296),r:ms.map(function(p){return coopSan(Object.assign({},p.presence.pw||{},{p:p.peer,n:p.presence.nick,c:p.presence.cls}));})};
+  NET.seen[run.id]=1;
+  NET.pt.presence({run:run}).catch(function(){});
+  coopBegin(run,true);
+}
+function soloStart(k){
+  if(NET.pt||(CO.B&&!CO.paid)||!(k>=0&&k<=S.coopMax))return;
+  coopBegin({id:'solo-'+rcode(8),k:k,seed:Math.floor(Math.random()*4294967296),r:[coopSan(Object.assign({},coopPw(S),{p:'me',n:myNick(),c:S.cls}))]},false);
+}
+function coopBegin(run,net){
+  if(CO.B&&!CO.paid)return;
+  const k=Number(run.k);
+  if(!(k>=0&&k<COOP.length)||!Array.isArray(run.r)||!run.r.length)return;
+  const r=run.r.slice(0,4).map(coopSan),me=myPeer();
+  CO.run={id:String(run.id).slice(0,20),k:k|0,seed:Number(run.seed)>>>0,r:r};
+  CO.B=coopInit(CO.run);CO.start=Date.now()+3000;CO.net=net;CO.mine=net?r.some(function(x){return x.p===me;}):true;
+  CO.n=r.length;CO.thief=r.reduce(function(m,x){return x.c==='thief'?Math.max(m,.1+(x.stl||0)):m;},0);CO.res=null;CO.paid=false;CO.shown=false;CO.log=['3秒後に戦闘開始'];
+  E.cfRes.hidden=true;
+  showTab('coop');
+}
+function coopTick(){
+  const B=CO.B;if(!B||CO.paid)return;
+  const now=Date.now();if(now<CO.start)return;
+  const target=(now-CO.start)/1000;let g=0;
+  while(!B.done&&B.t<target&&g++<3000)coopStep(B,.1);
+  for(const ev of B.ev){
+    if(ev.t==='kill')CO.log.push(ev.f.nm+'を倒した');
+    else if(ev.t==='down')CO.log.push(B.H[ev.h].nick+'が倒れた');
+    else if(ev.t==='rev')CO.log.push(ev.by!=null?B.H[ev.by].nick+'が'+B.H[ev.h].nick+'を起こした':B.H[ev.h].nick+'が立ち上がった');
+    else if(ev.t==='wave')CO.log.push('ウェーブ '+(ev.w+1)+' 開始');
+  }
+  B.ev.length=0;if(CO.log.length>4)CO.log=CO.log.slice(-4);
+  if(B.done){
+    CO.paid=true;
+    if(CO.mine)CO.res=coopReward(S,R,B.k,CO.n,B.win,CO.thief);
+    if(CO.net&&NET.host&&NET.pt)NET.pt.presence({run:null}).catch(function(){});
+    save();
+  }
+}
+function renderFight(){
+  const B=CO.B;
+  if(!B){if(!E.cfBox.hidden)hd(E.cfBox,true);return;}
+  hd(E.cfBox,false);
+  const cd=Math.ceil((CO.start-Date.now())/1000);
+  tx(E.cfName,B.C.n);
+  tx(E.cfInfo,cd>0?cd+'秒後に開始':B.done?(B.win?'勝利':'敗北'):'ウェーブ '+(B.w+1)+' / '+B.W.length+'　残り '+Math.max(0,Math.ceil(COOP_TIME-B.t))+'秒');
+  const foes=B.F.map(function(f){return '<div class="cfu foe'+(f.kind==='B'?' boss':'')+(f.alive?'':' dead')+'"><span class="g">'+f.g+'</span><span class="nm">'+esc(f.nm)+'</span><div class="bar"><i style="width:'+(f.hp/f.max*100).toFixed(1)+'%"></i></div></div>';}).join('');
+  const me=myPeer();
+  const party=B.H.map(function(h){return '<div class="cfu'+((CO.net?h.p===me:true)?' me':'')+(h.alive?'':' dead')+'"><span class="g">'+(CLSM[h.cls]||CLS[0]).g+'</span><span class="nm">'+esc(h.nick)+'</span><div class="bar"><i style="width:'+(h.hp/h.max*100).toFixed(1)+'%"></i></div><span class="nm">'+fmt(B.dmg[h.i])+'</span></div>';}).join('');
+  if(E.cfFoes._h!==foes){E.cfFoes._h=foes;E.cfFoes.innerHTML=foes;}
+  if(E.cfParty._h!==party){E.cfParty._h=party;E.cfParty.innerHTML=party;}
+  const lg=CO.log.map(esc).join('<br>');if(E.cfLog._h!==lg){E.cfLog._h=lg;E.cfLog.innerHTML=lg;}
+  if(CO.paid&&!CO.shown){
+    CO.shown=true;const r=CO.res;
+    tx(E.cfResT,B.C.n+(B.win?' クリア':B.why==='time'?' 時間切れ':' 全滅'));
+    let t='';
+    if(r){t='経験値 +'+fmt(r.xp)+'　ゴールド +'+fmt(r.gold)+'　鉱石 +'+r.ore+(r.first?'(初クリアのボーナス込み)':'')+'　熟練度 +'+r.mast;if(r.item)t+='<br>装備を手に入れた: <span class="iname r'+r.item.r+'">'+elChip(r.item.el)+esc(r.item.nm)+'</span>(Lv '+(r.item.t+1)+'・'+RAR[r.item.r].n+')'+(r.kept?'':'。持ち物がいっぱいなので鉱石にしました');if(r.pet&&PETM[r.pet])t+='<br>'+esc(PETM[r.pet].n)+(r.petR==='new'?'が仲間になった':r.petR==='bond'?'との絆が深まった':'がまた会いに来た');}
+    else t='観戦していたので報酬はありません。';
+    const tot=B.dmg.reduce(function(a,b){return a+b;},0)||1;
+    t+='<br>与ダメージ: '+B.H.map(function(h){return esc(h.nick)+' '+Math.round(B.dmg[h.i]/tot*100)+'%';}).join('　');
+    E.cfResTxt.innerHTML=t;E.cfRes.hidden=false;
+  }
+}
+function ptHtml(){
+  if(!NET.room)return '<p class="hint">ひとりで挑戦するときは、下のステージから選んでください。</p>';
+  if(!NET.pt){
+    const open=NET.lobby.filter(function(p){return !p.isMe&&p.presence&&typeof p.presence.pt==='string'&&/^[a-z0-9]{3,12}$/.test(p.presence.pt)&&(p.presence.pn|0)<4;});
+    let h='<div class="btnrow"><button type="button" class="btn" data-act="create"'+(NET.busy?' disabled':'')+'>パーティを作る</button></div>';
+    h+='<div class="field"><label class="sub" for="codeIn">コードで参加</label><div class="inrow"><input id="codeIn" maxlength="12" autocomplete="off" placeholder="例: k3v6q"><button type="button" class="btn" data-act="join"'+(NET.busy?' disabled':'')+'>参加</button></div></div>';
+    h+='<p class="hint">パーティを作ると5文字のコードが出ます。一緒に遊ぶ人にコードを送り、「コードで参加」に入れてもらってください。アカウントやメールアドレスはいりません。</p>';
+    if(open.length)h+='<div class="ptlist">'+open.map(function(p){const k=p.presence.pk|0;return '<div class="ptm"><div class="tile" aria-hidden="true">協</div><div><b>'+esc(String(p.presence.nick||'冒険者').slice(0,12))+'</b> のパーティ<div class="istat">'+(p.presence.pn|0)+' / 4人　'+(COOP[k]?esc(COOP[k].n):'')+'</div></div><button type="button" class="btn sm" data-act="joinpt" data-code="'+p.presence.pt+'">参加</button></div>';}).join('')+'</div>';
+    return h;
+  }
+  const ms=members(),host=hostPeer(),allRdy=ms.length>0&&ms.every(function(p){return p.presence.rdy;}),fighting=!!(CO.B&&!CO.paid);
+  const k=host&&COOP[host.presence.pk|0]?host.presence.pk|0:NET.stage;
+  let h='<div class="sp-head"><div><div class="sub">パーティのコード</div><div class="code">'+esc(NET.code)+'</div></div><button type="button" class="btn ghost sm" data-act="copy">コードをコピー</button></div>';
+  h+='<div class="ptlist">'+ms.map(function(p){const c=CLSM[p.presence.cls]||CLS[0];return '<div class="ptm"><div class="tile" aria-hidden="true">'+c.g+'</div><div><b>'+esc(String(p.presence.nick||'冒険者').slice(0,12))+'</b>'+(p.sameTab?'(あなた)':'')+(p.presence.host?'　ホスト':'')+(typeof p.presence.ti==='string'&&TTLM.hasOwnProperty(p.presence.ti)?' <span class="tt">〈'+TTLM[p.presence.ti].n+'〉</span>':'')+'<div class="istat">'+c.n+'　Lv '+fmt(+p.presence.lv||1)+elPw(p.presence.pw)+'</div></div><span class="st'+(p.presence.rdy?' ok':'')+'">'+(p.presence.rdy?'準備OK':'準備中')+'</span></div>';}).join('')+'</div>';
+  h+='<p class="hint">ステージ: '+esc(COOP[k].n)+'(目安 '+stageLabel(COOP[k].e)+')'+(ms.length<4?'　あと'+(4-ms.length)+'人まで参加できます':'')+'</p>';
+  h+='<div class="btnrow">';
+  if(NET.host)h+='<button type="button" class="btn" data-act="start"'+(!allRdy||fighting?' disabled':'')+'>出発する</button>';
+  else h+='<button type="button" class="btn'+(NET.ready?' ghost':'')+'" data-act="ready"'+(fighting?' disabled':'')+'>'+(NET.ready?'準備を取り消す':'準備OK')+'</button>';
+  h+='<button type="button" class="btn ghost" data-act="leave">パーティを抜ける</button></div>';
+  if(NET.host&&!allRdy)h+='<p class="hint">全員が「準備OK」になると出発できます。ステージはホストが下の一覧から選びます。</p>';
+  return h;
+}
+function listHtml(){
+  const inPt=!!NET.pt,host=NET.host,hp=hostPeer(),pk=inPt?(host?NET.stage:(hp?hp.presence.pk|0:-1)):-1,fighting=!!(CO.B&&!CO.paid);
+  return COOP.map(function(C,k){
+    const lock=k>S.coopMax&&!(inPt&&!host),clr=S.coopClr[k]|0;
+    let btn='';
+    if(!lock){
+      if(inPt&&host)btn=k===pk?'<span class="tag act">選択中</span>':'<button type="button" class="btn sm act" data-act="pick" data-k="'+k+'"'+(fighting?' disabled':'')+'>選ぶ</button>';
+      else if(inPt)btn=k===pk?'<span class="tag act">選択中</span>':'';
+      else btn='<button type="button" class="btn sm act" data-act="solo" data-k="'+k+'"'+(fighting?' disabled':'')+'>ひとりで挑戦</button>';
+    }
+    return '<div class="crow'+(k===pk?' sel':'')+(lock?' locked':'')+'"><div class="tile" aria-hidden="true">'+C.b[1]+'</div><h3>'+(k+1)+'. '+C.n+'</h3><div class="meta"><span>目安 '+stageLabel(C.e)+'</span><span class="elc el-'+C.el+'">'+ELN[C.el]+'</span><span>弱点 '+ELN[WEAK[C.el]]+'</span><span>装備 40%・鉱石 +'+(4+k)+'</span>'+(S.pets['c'+k]?'':'<span>初クリアでボスが仲間に</span>')+'<span>'+(lock?'前のステージをクリアで解放':(clr?'クリア '+clr+'回':'未クリア'))+'</span></div>'+btn+'</div>';
+  }).join('');
+}
+function updateCoop(force){
+  renderFight();
+  if(tab!=='coop'&&!force)return;
+  tx(E.netMsg,NET.msg);
+  const ph=ptHtml();
+  if(ph!==ptSig){const ci=$('codeIn'),cv=ci?ci.value:'',foc=!!ci&&document.activeElement===ci;ptSig=ph;E.ptBox.innerHTML=ph;const ni=$('codeIn');if(ni){ni.value=cv;if(foc)ni.focus();}}
+  const lh=listHtml();if(lh!==coopSig){coopSig=lh;E.coopList.innerHTML=lh;}
+  if(document.activeElement!==E.nickIn&&E.nickIn.value!==S.nick)E.nickIn.value=S.nick;
+}
+E.ptBox.addEventListener('click',function(ev){
+  const b=ev.target.closest('[data-act]');if(!b)return;
+  const a=b.dataset.act;
+  if(a==='create')openParty(rcode(5),true);
+  else if(a==='join'){const ci=$('codeIn');joinCode(ci?ci.value:'');}
+  else if(a==='joinpt')joinCode(b.dataset.code);
+  else if(a==='leave')leaveParty('');
+  else if(a==='ready'){NET.ready=!NET.ready;setParty();updateCoop(true);}
+  else if(a==='start')hostStart();
+  else if(a==='copy'){let p;try{p=navigator.clipboard.writeText(NET.code);}catch(e){p=Promise.reject(e);}p.then(function(){NET.msg='コードをコピーしました。';updateCoop(true);},function(){NET.msg='コード: '+NET.code;updateCoop(true);});}
+});
+E.ptBox.addEventListener('keydown',function(ev){if(ev.key==='Enter'&&ev.target.id==='codeIn')joinCode(ev.target.value);});
+E.coopList.addEventListener('click',function(ev){
+  const b=ev.target.closest('[data-act]');if(!b)return;
+  const k=+b.dataset.k;
+  if(b.dataset.act==='pick'&&NET.host&&k<=S.coopMax){NET.stage=k;setParty();setLobby();updateCoop(true);}
+  if(b.dataset.act==='solo')soloStart(k);
+});
+E.nickIn.addEventListener('change',function(){S.nick=E.nickIn.value.replace(/[\u0000-\u001f\u007f]/g,'').trim().slice(0,12);E.nickIn.value=S.nick;save();netRefresh();});
+E.cfResClose.onclick=function(){E.cfRes.hidden=true;CO.B=null;CO.run=null;updateCoop(true);};
+E.coopBanner.onclick=function(){showTab('coop');};
+E.recBtn.onclick=function(){showTab('log');};
+
+/* loop */
+let last=Date.now(),lastSave=Date.now();
+function tick(){
+  const now=Date.now();let dt=(now-last)/1000;last=now;
+  if(dt<=0)return;
+  S.playMs+=dt*1000;
+  const kg=regenKeys(S,dt);
+  if(dt>3){
+    let left=dt;
+    if(S.dun){
+      while(left>0&&S.dun){const d=Math.min(.1,left),s1=stats(S);left-=d;step(S,R,d*s1.speed,s1,false);}
+      R.ev.length=0;
+    }
+    if(left>3){const rep=offlineSim(S,R,left);rep.keys=kg;if(left>60)showReport(rep);}
+    renderTree();
+  }else{
+    const s0=stats(S);let left=dt*s0.speed;
+    while(left>0){const d=Math.min(.1,left);left-=d;step(S,R,d,s0,false);}
+  }
+  coopTick();
+  if(NET.pt&&now-NET.lastP>5000){setParty();checkHost();}
+  if(now-lastSec>=1000){lastSec=now;everySecond();}
+  if(now-lastSave>5000){lastSave=now;save();}
+  /* nothing to draw while the page is hidden; the game itself keeps running */
+  if(document.hidden){R.ev.length=0;return;}
+  drain();updateUI();
+}
+/* once a second: achievements and the awakening automation */
+let lastSec=0;
+function everySecond(){
+  if(achCheck(S,R).length)ttlSig='';
+  autoTrain(S);
+  if(autoSkill(S)&&tab==='skill')renderTree();
+  if(!S.dun&&autoRebirth(S,R)){sel=null;logSig='';E.report.hidden=true;renderTree();renderDetail();save();}
+}
+E.buySeg.addEventListener('click',function(ev){const b=ev.target.closest('[data-buy]');if(!b)return;S.buyN=+b.dataset.buy;updateUI();save();});
+E.optAutoTr.addEventListener('change',function(){S.autoTr=E.optAutoTr.checked;save();});
+E.optReb.addEventListener('change',function(){S.autoReb=+E.optReb.value||0;E.optReb._s='';save();});
+E.starList.addEventListener('click',function(ev){const b=ev.target.closest('[data-star]');if(!b)return;if(starBuy(S,b.dataset.star)){updateUI();save();netRefresh();}});
+
+/* tabs */
+function showTab(name){
+  tab=name;
+  for(const id of ['battle','train','skill','dun','coop','reb','log'])$('tab-'+id).hidden=(id!==name);
+  document.querySelectorAll('.tab').forEach(function(b){b.setAttribute('aria-selected',b.dataset.tab===name?'true':'false');});
+  if(name==='skill'){renderTree();renderDetail();}
+  if(name==='train')showSub(sub);
+  if(name==='coop'){ptSig='';coopSig='';updateCoop(true);}
+  if(name==='log')showLog(logView);
+  window.scrollTo(0,0);
+  updateUI();
+}
+document.querySelector('.tabs').addEventListener('click',function(ev){
+  const b=ev.target.closest('.tab');if(b)showTab(b.dataset.tab);
+});
+E.modeAdv.onclick=function(){if(S.mode!=='advance'){S.mode='advance';R.enemy=null;R.wait=.2;updateUI();save();}};
+E.modeFarm.onclick=function(){if(S.mode!=='farm'){S.mode='farm';R.enemy=null;R.wait=.2;updateUI();save();}};
+E.trainList.addEventListener('click',function(ev){
+  const b=ev.target.closest('[data-train]');if(!b)return;
+  if(trainN(S,b.dataset.train,S.buyN)){updateUI();save();}
+});
+E.tree.addEventListener('click',function(ev){
+  const b=ev.target.closest('.node');if(!b)return;
+  sel=b.dataset.id;renderTree();renderDetail();
+});
+E.detail.addEventListener('click',function(ev){
+  const t=ev.target.closest('[data-tg]');
+  if(t){if(sel&&SKM[sel])setTarget(sel,skTarget(S,SKM[sel])+(+t.dataset.tg));return;}
+  if(!ev.target.closest('#learnBtn'))return;
+  if(sel&&learn(S,sel)){renderTree();renderDetail();updateUI();save();}
+});
+E.repClose.onclick=function(){E.report.hidden=true;};
+function enterDun(id){if(startDun(S,R,id)){logSig='';showTab('battle');save();}}
+E.drClose.onclick=function(){R.dunRes=null;E.dunRes.hidden=true;};
+function doQuick(id){
+  if(!quickDun(S,R,id,S.qkAll?S.keys:1))return;
+  logSig='';updateUI();save();
+  try{E.dunRes.scrollIntoView({block:'start',behavior:'smooth'});}catch(e){}
+}
+E.drAgain.onclick=function(){const r=R.dunRes;if(!r)return;if(r.quick)doQuick(r.id);else enterDun(r.id);};
+E.dunList.addEventListener('click',function(ev){
+  const q=ev.target.closest('[data-quick]');if(q){doQuick(q.dataset.quick);return;}
+  const b=ev.target.closest('[data-dun]');if(b)enterDun(b.dataset.dun);
+});
+E.qkSeg.addEventListener('click',function(ev){const b=ev.target.closest('[data-qk]');if(!b)return;S.qkAll=b.dataset.qk==='all';updateUI();save();});
+E.soulList.addEventListener('click',function(ev){
+  const b=ev.target.closest('[data-soul]');if(!b)return;
+  if(soulBuy(S,b.dataset.soul)){updateUI();save();}
+});
+
+function twoStep(btn,label,again,action){
+  let armed=false,timer=0;
+  btn.onclick=function(){
+    if(!armed){armed=true;btn.textContent=again;timer=setTimeout(function(){armed=false;btn.textContent=label;},4000);return;}
+    clearTimeout(timer);armed=false;btn.textContent=label;action();
+  };
+}
+twoStep(E.skReset,'スキルを振り直す','もう一度押すと全SPを返却',function(){resetSkills(S);renderTree();renderDetail();updateUI();save();});
+twoStep(E.awkBtn,'覚醒する','もう一度押すと覚醒',function(){
+  if(awaken(S,R)){sel=null;logSig='';E.report.hidden=true;renderTree();renderDetail();updateUI();save();netRefresh();}
+});
+twoStep(E.retreat,'撤退する','もう一度押すと撤退',function(){if(S.dun){endDun(S,R,'retreat');updateUI();save();}});
+twoStep(E.rebBtn,'転生する','もう一度押すと転生',function(){
+  if(rebirth(S,R)){sel=null;logSig='';E.report.hidden=true;renderTree();renderDetail();updateUI();save();}
+});
+twoStep(E.hardReset,'最初からやり直す','もう一度押すと全データを削除',function(){
+  S=defaultState();R=newRuntime();S.hp=stats(S).hpMax;sel=null;E.report.hidden=true;
+  say(R,'冒険が始まった');logSig='';
+  try{localStorage.removeItem(KEY);}catch(e){}
+  renderTree();renderDetail();updateUI();showTab('battle');
+});
+function msg(t){E.saveMsg.textContent=t;}
+E.saveCopy.onclick=function(){
+  const code=btoa(String.fromCharCode.apply(null,Array.from(new TextEncoder().encode(JSON.stringify(S)))));
+  E.saveBox.value=code;
+  let p;try{p=navigator.clipboard.writeText(code);}catch(e){p=Promise.reject(e);}
+  p.then(function(){msg('コピーしました。');},function(){E.saveBox.select();msg('下のコードを選択してコピーしてください。');});
+};
+E.saveLoad.onclick=function(){
+  try{
+    const o=JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(E.saveBox.value.trim()),function(c){return c.charCodeAt(0);})));
+    if(!o||typeof o.lvl!=='number')throw new Error('bad');
+    S=merge(o);S.dun=null;R=newRuntime();S.hp=Math.min(S.hp,stats(S).hpMax);if(S.hp<=0)S.hp=stats(S).hpMax;
+    say(R,'セーブを読み込んだ');noteRefund();logSig='';sel=null;
+    renderTree();renderDetail();updateUI();save();msg('読み込みました。');
+  }catch(e){msg('読み込めませんでした。コードを確認してください。');}
+};
+window.addEventListener('pagehide',save);
+document.addEventListener('visibilitychange',function(){if(document.hidden)save();});
+
+/* boot: a live update hands over the running state; otherwise resume from the save */
+function start(data){
+  const hs=data&&data.S&&typeof data.S.lvl==='number'?data.S:null;
+  S=hs?merge(hs):loadSave();
+  loaded=!hs&&!!S;
+  if(!S)S=defaultState();
+  R=newRuntime();
+  st=stats(S);
+  if(!(S.hp>0)||S.hp>st.hpMax)S.hp=st.hpMax;
+  say(R,hs?'冒険を続ける':'冒険が始まった');noteRefund();
+  if(loaded){
+    if(S.dun)endDun(S,R,'stop');
+    const away=Math.max(0,(Date.now()-S.savedAt)/1000);
+    const kg=regenKeys(S,away);
+    if(away>3){const rep=offlineSim(S,R,away);rep.keys=kg;if(away>60)showReport(rep);}
+  }
+  achCheck(S,R);
+  last=Date.now();
+  renderTree();renderDetail();updateUI();
+  setInterval(tick,100);
+  netInit();
+}
+const hot=window.claude&&window.claude.hot;
+try{if(hot&&hot.snapshot)hot.snapshot(function(){return {S:S};});}catch(e){}
+if(hot&&hot.ready)hot.ready(start);else start((hot&&hot.data)||{});
+})();
+</script>
+</body>
+</html>
