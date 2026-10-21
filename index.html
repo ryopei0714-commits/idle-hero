@@ -665,10 +665,20 @@ textarea{width:100%;background:var(--surface2);border:2px solid var(--line);padd
   var SIG={host:'0.peerjs.com',port:443,secure:true,path:'/',key:'peerjs'};
   var o=window.IH_SIG||{};for(var k in o)SIG[k]=o[k];
   var ICE={iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:['turn:eu-0.turn.peerjs.com:3478','turn:us-0.turn.peerjs.com:3478'],username:'peerjs',credential:'peerjsp'}]};
-  var PFX='idlehero2-',TICK=5000,LOST=20000,FALLBACK=8000,MAXN=4;
+  var PFX='idlehero2-',TICK=5000,LOST=20000,FALLBACK=6000,MAXN=4;
   var HAS_RTC=typeof RTCPeerConnection==='function'&&!window.IH_NO_RTC;
   function rid(n){var a='abcdefghijkmnpqrstuvwxyz23456789',s='';for(var i=0;i<n;i++)s+=a[Math.floor(Math.random()*a.length)];return s;}
   function err(code){var e=new Error(code);e.code=code;return e;}
+  function log(){try{console.log.apply(console,['[coop]'].concat([].slice.call(arguments)));}catch(e){}}
+  /* the public server is sometimes slow to answer: try the signalling socket up to three times */
+  function openSig(id,tries){
+    var s=new Sig(id);
+    return s.ready.then(function(){log('signalling open',id);return s;},function(e){
+      log('signalling failed',e.code,'tries left',tries-1);s.close();
+      if(e.code!=='sig'||tries<=1)throw e;
+      return new Promise(function(r){setTimeout(r,1500);}).then(function(){return openSig(id,tries-1);});
+    });
+  }
   function clone(v){return JSON.parse(JSON.stringify(v));}
 
   /* the signalling socket (PeerJS server protocol) */
@@ -676,17 +686,17 @@ textarea{width:100%;background:var(--surface2);border:2px solid var(--line);padd
     var self=this;this.id=id;this.h={};this.open=false;this.onclose=null;
     var url=(SIG.secure?'wss':'ws')+'://'+SIG.host+':'+SIG.port+SIG.path+'peerjs?key='+encodeURIComponent(SIG.key)+'&id='+encodeURIComponent(id)+'&token='+rid(12)+'&version=1.5.4';
     this.ready=new Promise(function(res,rej){
-      var t=setTimeout(function(){rej(err('net'));self.close();},12000);
-      try{self.ws=new WebSocket(url);}catch(e){clearTimeout(t);rej(err('net'));return;}
+      var t=setTimeout(function(){rej(err('sig'));self.close();},12000);
+      try{self.ws=new WebSocket(url);}catch(e){clearTimeout(t);rej(err('sig'));return;}
       self.ws.onmessage=function(ev){
         var m;try{m=JSON.parse(ev.data);}catch(e){return;}
         if(m.type==='OPEN'){clearTimeout(t);self.open=true;res();return;}
         if(m.type==='ID-TAKEN'){clearTimeout(t);rej(err('taken'));return;}
-        if(m.type==='ERROR'&&!self.open){clearTimeout(t);rej(err('net'));return;}
+        if(m.type==='ERROR'&&!self.open){clearTimeout(t);rej(err('sig'));return;}
         var f=self.h[m.type];if(f)f(m);
       };
-      self.ws.onerror=function(){if(!self.open){clearTimeout(t);rej(err('net'));}};
-      self.ws.onclose=function(){var was=self.open;self.open=false;if(!was){clearTimeout(t);rej(err('net'));}if(self.onclose)self.onclose();};
+      self.ws.onerror=function(){log('socket error');if(!self.open){clearTimeout(t);rej(err('sig'));}};
+      self.ws.onclose=function(){var was=self.open;self.open=false;if(!was){clearTimeout(t);rej(err('sig'));}if(self.onclose)self.onclose();};
     });
     this.hb=setInterval(function(){self.send({type:'HEARTBEAT'});},TICK);
   }
@@ -744,11 +754,11 @@ textarea{width:100%;background:var(--surface2);border:2px solid var(--line);padd
     var myId=host?hubId:hubId+'-'+rid(6);
     var P={pres:{},seen:{},handlers:[],closers:[],mine:{},links:{},closed:false,last:Date.now(),t:0,timer:0};
     P.pres[myId]={presence:{},updatedAt:Date.now()};
-    var sig=new Sig(myId);
+    var sig=null;
     function snap(){var out=[];for(var p in P.pres)out.push(Object.freeze({peer:p,by:null,isMe:p===myId,sameTab:p===myId,kind:'viewer',guest:false,presence:Object.freeze(clone(P.pres[p].presence)),updatedAt:P.pres[p].updatedAt}));out.sort(function(a,b){return a.peer<b.peer?-1:1;});return Object.freeze(out);}
     function fire(){if(P.t||P.closed)return;P.t=setTimeout(function(){P.t=0;if(P.closed)return;var ps=snap();P.handlers.slice().forEach(function(h){try{h({peers:ps,joined:[],left:[],updated:[]});}catch(e){console.error(e);}});},16);}
     function lost(){if(P.closed)return;shut();P.closers.slice().forEach(function(f){try{f({code:'disconnected'});}catch(e){}});}
-    function shut(){P.closed=true;clearInterval(P.timer);clearTimeout(P.t);for(var r in P.links){try{P.links[r].send({t:'bye'});}catch(e){}P.links[r].close();}P.links={};sig.close();}
+    function shut(){P.closed=true;clearInterval(P.timer);clearTimeout(P.t);for(var r in P.links){try{P.links[r].send({t:'bye'});}catch(e){}P.links[r].close();}P.links={};if(sig)sig.close();}
     /* hub: collect everyone's presence and hand the whole list back out */
     function list(){var l=[];for(var p in P.pres)l.push({peer:p,presence:P.pres[p].presence});return l;}
     function spread(){if(!host)return;var m={t:'all',l:list()};for(var r in P.links)if(P.links[r].isOpen())P.links[r].send(m);fire();}
@@ -763,11 +773,6 @@ textarea{width:100%;background:var(--surface2);border:2px solid var(--line);padd
         }else if(m.t==='bye'){drop(r);spread();}
       };
       return L;
-    }
-    if(host){
-      sig.h.OFFER=function(m){var p=m.payload||{};if(!m.src||!p.sdp||P.closed)return;if(P.links[m.src])drop(m.src);hubLink(m.src,false).answer(p.sdp);};
-      sig.h.ANSWER=sig.h.CANDIDATE=function(m){if(!m.src)return;var L=P.links[m.src];if(!L&&m.payload&&typeof m.payload.g==='string')L=hubLink(m.src,false);if(L)L.signal(m);};
-      sig.h.EXPIRE=function(m){if(m.src&&P.links[m.src]){drop(m.src);spread();}};
     }
     var api={name:name,
       presence:function(patch){
@@ -784,7 +789,13 @@ textarea{width:100%;background:var(--surface2);border:2px solid var(--line);padd
       connected:function(){return !P.closed;}
     };
     window.addEventListener('pagehide',function(){if(!P.closed)shut();});
-    return sig.ready.then(function(){
+    return openSig(myId,3).then(function(o){
+      sig=o;
+    if(host){
+        sig.h.OFFER=function(m){var p=m.payload||{};if(!m.src||!p.sdp||P.closed)return;if(P.links[m.src])drop(m.src);hubLink(m.src,false).answer(p.sdp);};
+        sig.h.ANSWER=sig.h.CANDIDATE=function(m){if(!m.src)return;var L=P.links[m.src];if(!L&&m.payload&&typeof m.payload.g==='string')L=hubLink(m.src,false);if(L)L.signal(m);};
+        sig.h.EXPIRE=function(m){if(m.src&&P.links[m.src]){drop(m.src);spread();}};
+      }
       if(host){
         P.timer=setInterval(function(){var now=Date.now(),ch=false;for(var r in P.seen)if(now-P.seen[r]>LOST){drop(r);ch=true;}spread();},TICK);
         return api;
@@ -792,12 +803,12 @@ textarea{width:100%;background:var(--surface2);border:2px solid var(--line);padd
       return new Promise(function(res,rej){
         var done=false;
         function fail(c){if(done)return;done=true;shut();rej(err(c));}
-        var to=setTimeout(function(){fail('net');},25000);
+        var to=setTimeout(function(){log('no answer from the party');fail('p2p');},25000);
         var L=new Link(sig,hubId,true);P.links[hubId]=L;
         sig.h.ANSWER=sig.h.CANDIDATE=function(m){if(m.src===hubId)L.signal(m);};
         sig.h.EXPIRE=function(m){if(m.src===hubId){if(!done)fail('not_found');else lost();}};
         sig.onclose=function(){if(!done)fail('net');};
-        L.onopen=function(){L.send({t:'p',p:P.mine});};
+        L.onopen=function(){log('link open',L.relay?'relay':'direct');L.send({t:'p',p:P.mine});};
         L.onmsg=function(m){
           if(m.t==='full'){if(!done)fail('full');else lost();return;}
           if(m.t==='bye'){if(!done)fail('not_found');else lost();return;}
@@ -2658,8 +2669,15 @@ async function openParty(code,host){
   if(!NET.room||NET.pt||NET.busy)return;
   NET.busy=true;NET.msg=host?'パーティを作っています…':'パーティに参加しています…';updateCoop(true);
   let pt;
-  try{pt=await NET.room.join('pt-'+code,{host:host});}
-  catch(e){NET.busy=false;const c=e&&e.code;NET.msg=c==='not_found'?'そのコードのパーティが見つかりません。コードと、作った人がこの画面を開いたままかを確かめてください。':c==='full'?'このパーティは満員です(4人まで)。':c==='taken'?'もう一度「パーティを作る」を押してください。':'接続できませんでした。通信できる場所で、もう一度試してください。';updateCoop(true);return;}
+  /* the platform can answer a join late or refuse it for a moment (upstream_error, limit_reached): try three times before giving up */
+  for(let i=0;;i++){
+    try{pt=await NET.room.join('pt-'+code,{host:host});break;}
+    catch(e){
+      const c=(e&&e.code)||'unknown';
+      if(false&&c!=='not_permitted'&&c!=='invalid_argument'&&c!=='not_granted'&&c!=='revoked'){await new Promise(function(r){setTimeout(r,1500*(i+1));});continue;}
+      NET.busy=false;NET.msg=c==='not_found'?'そのコードのパーティが見つかりません。コードと、作った人がこの画面を開いたままかを確かめてください。':c==='full'?'このパーティは満員です(4人まで)。':c==='taken'?'もう一度「パーティを作る」を押してください。':c==='sig'?'協力プレイの中継サーバーにつながりませんでした。少し待ってもう一度試すか、Wi-Fiとモバイル回線を切り替えてみてください。(理由: sig)':c==='p2p'?'パーティは見つかりましたが、相手との通信が始まりませんでした。両方の画面で再読み込みしてから、もう一度試してください。(理由: p2p)':'接続できませんでした。もう一度試してください。(理由: '+c+')';updateCoop(true);return;
+    }
+  }
   NET.busy=false;NET.pt=pt;NET.code=code;NET.host=host;NET.ready=false;NET.peers=[];NET.msg='';NET.joinedAt=Date.now();
   if(host)NET.stage=Math.min(S.coopMax,NET.stage);
   pt.onPeers(onParty,function(){if(NET.pt===pt){NET.pt=null;NET.peers=[];NET.host=false;NET.msg='パーティとの接続が切れました。';setLobby();updateCoop(true);}});
