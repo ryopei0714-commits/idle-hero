@@ -587,6 +587,7 @@ textarea{width:100%;background:var(--surface2);border:2px solid var(--line);padd
       </div>
       <h2 class="sub">魂の祭壇</h2>
       <p class="lead">魂を使って、転生しても消えない力を得ます。上の4つは何度でも強化でき、効果は掛け算で重なります。</p>
+      <div class="trtools"><div class="seg" role="group" aria-label="1回に強化する数" id="soulSeg"><button type="button" data-sn="1">1回</button><button type="button" data-sn="10">10回</button><button type="button" data-sn="100">100回</button><button type="button" data-sn="0">最大</button></div></div>
       <div id="soulList"></div>
       <div class="card awk" id="awkCard">
         <div class="soulhead"><div><div class="sub">覚醒と星</div><div class="star-big" id="starBig">0</div></div><p class="hint" id="awkCount"></p></div>
@@ -1131,7 +1132,7 @@ function stageLabel(stage){const z=zoneInfo(stage);return (z.zi+1)+'-'+z.no;}
 function defaultState(){return {v:VER,lvl:1,xp:0,gold:0,sp:1,stage:1,kills:0,maxStage:1,mode:'advance',train:trainZero(),skills:{},hp:50,totalKills:0,totalGold:0,deaths:0,playMs:0,savedAt:Date.now(),souls:0,totalSouls:0,rebirths:0,soul:{},bestStage:1,keys:3,keyT:0,dun:null,dunBest:{},
   cls:'hero',nick:'',eq:{w:null,a:null,r:null},inv:[],ore:0,itemSeq:0,coopMax:0,coopClr:{},place:'main',el:elZero(),autoDis:false,mast:mastZero(),
   pets:{},party:[],petNew:0,bossKills:0,maxLvl:1,ach:{},achNew:0,title:'',coopBig:0,enhMax:0,legend:0,
-  stars:0,totalStars:0,awk:0,star:{},cycBest:1,autoTr:false,skAuto:false,skPlan:null,skProof:true,autoReb:0,buyN:1,runStart:1,qkAll:false};}
+  stars:0,totalStars:0,awk:0,star:{},cycBest:1,autoTr:false,skAuto:false,skPlan:null,skProof:true,autoReb:0,buyN:1,soulN:1,runStart:1,qkAll:false};}
 function newRuntime(){return {enemy:null,ht:0,et:0,hits:0,wait:0,dead:0,ev:[],log:[],acc:null,dunRes:null,pt:[]};}
 function skLv(S,id){return S.skills[id]||0;}
 function stats(S){
@@ -1334,13 +1335,19 @@ function rebirth(S,R){
   say(R,S.rebirths+'度目の転生 魂 +'+fmt(g));
   return g;
 }
-function soulBuy(S,id){
-  const s=SOULM[id],lv=soLv(S,id);
-  if(s.max&&lv>=s.max)return false;
-  const c=soulCost(id,lv);if(S.souls<c)return false;
-  const b=stats(S).hpMax;S.souls-=c;S.soul[id]=lv+1;
+/* how many levels of one soul altar row the souls on hand buy, up to lim (0 = as many as possible) */
+function soulPlan(S,id,lim){
+  const s=SOULM[id];if(!s)return {n:0,c:0};
+  let lv=soLv(S,id),n=0,c=0;const cap=s.max||Infinity,want=lim>0?lim:Infinity;
+  while(n<want&&lv<cap&&n<100000){const x=soulCost(id,lv);if(c+x>S.souls)break;c+=x;lv++;n++;}
+  return {n:n,c:c};
+}
+function soulBuy(S,id,lim){
+  const s=SOULM[id];if(!s)return false;
+  const pl=soulPlan(S,id,lim==null?1:lim);if(!pl.n)return false;
+  const b=stats(S).hpMax;S.souls-=pl.c;S.soul[id]=soLv(S,id)+pl.n;
   const a=stats(S).hpMax;if(a>b)S.hp+=a-b;
-  return true;
+  return pl.n;
 }
 function die(S,R,off){
   S.hp=0;R.dead=2.5;R.enemy=null;
@@ -1882,7 +1889,7 @@ function merge(o){
   s.dunBest=Object.assign({},o.dunBest||{});
   s.coopClr=Object.assign({},o.coopClr||{});
   for(const k of ['lvl','xp','gold','sp','stage','kills','maxStage','hp','souls','totalSouls','rebirths','bestStage','keys','keyT','totalKills','totalGold','deaths','playMs','savedAt','ore','itemSeq','coopMax',
-    'petNew','bossKills','maxLvl','achNew','coopBig','enhMax','legend','stars','totalStars','awk','cycBest','autoReb','buyN','runStart']){if(typeof s[k]!=='number'||!isFinite(s[k]))s[k]=d[k];}
+    'petNew','bossKills','maxLvl','achNew','coopBig','enhMax','legend','stars','totalStars','awk','cycBest','autoReb','buyN','soulN','runStart']){if(typeof s[k]!=='number'||!isFinite(s[k]))s[k]=d[k];}
   if(s.mode!=='farm')s.mode='advance';
   if(!CLSM[s.cls])s.cls='hero';
   s.nick=typeof s.nick==='string'?s.nick.replace(/[\u0000-\u001f\u007f]/g,'').slice(0,12):'';
@@ -1925,6 +1932,7 @@ function merge(o){
   if(typeof o.cycBest!=='number'||!(o.cycBest>=1))s.cycBest=Math.max(s.bestStage,s.maxStage);
   s.maxLvl=Math.max(s.maxLvl||1,s.lvl);
   if([0,1,10].indexOf(s.buyN)<0)s.buyN=1;
+  if([0,1,10,100].indexOf(s.soulN)<0)s.soulN=1;
   s.stars=Math.max(0,s.stars);s.awk=Math.max(0,Math.floor(s.awk));s.petNew=Math.max(0,s.petNew|0);s.achNew=Math.max(0,s.achNew|0);
   if(!s.dun||typeof s.dun!=='object'||!DUNM[s.dun.id])s.dun=null;
   s.bestStage=Math.max(s.bestStage,s.maxStage);s.v=VER;
@@ -1941,7 +1949,7 @@ const E={};
 ['gold','spTop','spChip','report','repTxt','repClose','zoneName','stageNo','modeNote','modeAdv','modeFarm','pips','heroUnit','foeUnit','foeSprite','foeGlyph','foeName','foeFill','foeTxt','hpFill','hpTxt','lvU','lv','xpTxt','xpFill','sAtk','sDef','sInt','sCrit','sReg','sDps','log','trainList','spBig','tree','detail','skReset','rec','offInfo','saveCopy','saveBox','saveLoad','saveMsg','hardReset','bdTrain','bdSkill','soulChip','soulTop','dunRes','drTitle','drTxt','drClose','drAgain','stgLbl','modeSeg','retreat','dunBar','keyPips','keyNext','dunLvl','dunList','soulBig','rebCount','rebBody','rebBtn','soulList','bdDun','bdReb','sCritD','sDodge','sSpd','recBtn','coopBanner','heroG','heroN','subSeg','eqSlots','oreN','craftCost','craftBtns','craftMsg','invN','dismAll','invList','clsList','cfBox','cfName','cfInfo','cfFoes','cfParty','cfLog','cfRes','cfResT','cfResTxt','cfResClose','ptBox','netMsg','nickIn','coopList','bdCoop','placeSeg','stageNav','navInfo','elInfo','dropBtn','statBtn','dropBox','fullStats','craftLv','autoDis','mastSeg','mastName','mastLv','mastPts','mastFill','mastNote','mastTree','mastDetail','mastReset',
  'petRow','bdPet','ptyNote','ptySlots','petN','petList','dexN','dexNote','dexGrid','dexDetail','smith',
  'logSeg','bdAch','bdRec','achBig','achNote','achList','ttlList','heroT',
- 'starChip','starTop','starBig','awkCount','awkBody','awkBtn','starSec','starList','autoBox','arebBox','optReb','autoNote','skAutoSeg','skAutoTxt','skProofChk','skPlanSave','skPlanMax','buySeg','autoTrBox','optAutoTr','qkSeg'].forEach(function(id){E[id]=$(id);});
+ 'starChip','starTop','starBig','awkCount','awkBody','awkBtn','starSec','starList','autoBox','arebBox','optReb','autoNote','skAutoSeg','skAutoTxt','skProofChk','skPlanSave','skPlanMax','buySeg','soulSeg','autoTrBox','optAutoTr','qkSeg'].forEach(function(id){E[id]=$(id);});
 
 /* DOM writes happen only when a value really changes; setting hidden, disabled or aria-pressed to the value it already has still makes the browser restyle.
    Text is changed inside the existing text node, so nothing is removed from or added to the page */
@@ -2202,6 +2210,7 @@ function updateDun(){
 }
 function updateReb(){
   tx(E.soulBig,fmt(S.souls));
+  E.soulSeg.querySelectorAll('button').forEach(function(b){ap(b,+b.dataset.sn===S.soulN);});
   tx(E.rebCount,'転生 '+S.rebirths+'回　通算の最高 '+stageLabel(Math.max(S.bestStage,S.maxStage)));
   const g=soulGain(S);let h;
   if(S.maxStage<REB_STAGE){
@@ -2217,7 +2226,8 @@ function updateReb(){
     tx(el.lv,'Lv '+lv+(s.max?' / '+s.max:''));
     tx(el.d,s.mul?(s.u+' ×'+s.mul+' / Lv　現在 ×'+fmtMul(soMul(S,s.id))):(s.e+' / Lv'+(s.id==='speed'?'　現在 ×'+st.speed.toFixed(2):'')));
     if(full){tx(el.b,'最大');ds(el.b,true);}
-    else{const c=soulCost(s.id,lv);tx(el.b,'魂 '+fmt(c));ds(el.b,S.souls<c);}
+    else if(S.soulN===1){const c=soulCost(s.id,lv);tx(el.b,'魂 '+fmt(c));ds(el.b,S.souls<c);}
+    else{const pl=soulPlan(S,s.id,S.soulN);if(pl.n>0){tx(el.b,'×'+pl.n+'　魂 '+fmt(pl.c));ds(el.b,false);}else{tx(el.b,'魂 '+fmt(soulCost(s.id,lv)));ds(el.b,true);}}
   }
   /* awakening */
   tx(E.starBig,fmt(S.stars));
@@ -2931,8 +2941,9 @@ E.dunList.addEventListener('click',function(ev){
 E.qkSeg.addEventListener('click',function(ev){const b=ev.target.closest('[data-qk]');if(!b)return;S.qkAll=b.dataset.qk==='all';updateUI();save();});
 E.soulList.addEventListener('click',function(ev){
   const b=ev.target.closest('[data-soul]');if(!b)return;
-  if(soulBuy(S,b.dataset.soul)){updateUI();save();}
+  if(soulBuy(S,b.dataset.soul,S.soulN)){updateUI();save();}
 });
+E.soulSeg.addEventListener('click',function(ev){const b=ev.target.closest('[data-sn]');if(!b)return;S.soulN=+b.dataset.sn;updateUI();save();});
 
 function twoStep(btn,label,again,action){
   let armed=false,timer=0;
